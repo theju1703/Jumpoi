@@ -72,6 +72,22 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
+  // Populate Items Master Table
+  const itemsTbody = document.querySelector("#table-items-master tbody");
+  if (itemsTbody) {
+    itemsTbody.innerHTML = appData.items.map(it => `
+      <tr>
+        <td><code>${it.item_code}</code></td>
+        <td><strong>${it.name}</strong></td>
+        <td>${it.brand}</td>
+        <td>${it.category}</td>
+        <td>₹${it.price.toFixed(2)}</td>
+        <td><span class="badge badge-success">${it.gst_percent}%</span></td>
+        <td><span class="badge badge-success">Active Master</span></td>
+      </tr>
+    `).join("");
+  }
+
   // Populate Sales Table
   const salesTbody = document.querySelector("#table-sales tbody");
   if (salesTbody) {

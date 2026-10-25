@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Jompoi Grocery Data Pipeline & Analytics Hub</title>
+  <title>Jompoi Enterprise ERP & Data Pipeline</title>
   <link rel="stylesheet" href="styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
@@ -13,119 +13,364 @@
     <!-- Sidebar Navigation -->
     <aside class="sidebar">
       <div class="brand">
-        <div class="brand-icon"><i class="fa-solid fa-cart-shopping"></i></div>
+        <div class="brand-icon"><i class="fa-solid fa-layer-group"></i></div>
         <div class="brand-text">
-          <h2>Jompoi</h2>
-          <span>Analytics & Pipeline</span>
+          <h2>Jompoi ERP</h2>
+          <span>Business System</span>
         </div>
       </div>
 
       <nav class="nav-menu">
-        <button class="nav-item active" data-tab="tab-executive">
-          <i class="fa-solid fa-gauge-high"></i> Executive Dashboard
+        <button class="nav-item active" data-tab="tab-blueprint">
+          <i class="fa-solid fa-diagram-project"></i> Architecture Blueprint
+        </button>
+        <button class="nav-item" data-tab="tab-erp-pnl">
+          <i class="fa-solid fa-file-invoice-dollar"></i> Profit & Loss (ERP)
+        </button>
+        <button class="nav-item" data-tab="tab-gst-itc">
+          <i class="fa-solid fa-building-columns"></i> GST & ITC Report
+        </button>
+        <button class="nav-item" data-tab="tab-executive">
+          <i class="fa-solid fa-chart-pie"></i> Executive Analytics
+        </button>
+        <button class="nav-item" data-tab="tab-items">
+          <i class="fa-solid fa-box-open"></i> Master Items Catalog
         </button>
         <button class="nav-item" data-tab="tab-sales">
-          <i class="fa-solid fa-chart-line"></i> Sales Analytics
+          <i class="fa-solid fa-cart-shopping"></i> Sales Invoices
         </button>
         <button class="nav-item" data-tab="tab-purchases">
-          <i class="fa-solid fa-truck-ramp-box"></i> Purchases & Suppliers
+          <i class="fa-solid fa-truck"></i> Purchase Invoices
         </button>
         <button class="nav-item" data-tab="tab-inventory">
-          <i class="fa-solid fa-boxes-stacked"></i> Inventory & Stock
-        </button>
-        <button class="nav-item" data-tab="tab-gst">
-          <i class="fa-solid fa-receipt"></i> GST & ITC Reconciliation
-        </button>
-        <button class="nav-item" data-tab="tab-erp">
-          <i class="fa-solid fa-calculator"></i> ERPNext P&L Statement
+          <i class="fa-solid fa-boxes-stacked"></i> Stock Ledger
         </button>
         <button class="nav-item" data-tab="tab-etl">
-          <i class="fa-solid fa-arrows-rotate"></i> ETL Pipeline Inspector
+          <i class="fa-solid fa-cloud-arrow-up"></i> Google Cloud Sync
         </button>
       </nav>
 
       <div class="sidebar-footer">
         <div class="pipeline-badge">
           <span class="status-indicator pulse"></span>
-          <span>Pipeline: Ready</span>
+          <span>ERP System: Connected</span>
         </div>
-        <small>BigQuery Dataset: <code>jompoi_reporting</code></small>
+        <small>GCP Project: <code>project-b6567b21</code></small>
       </div>
     </aside>
 
     <!-- Main Content Area -->
     <main class="main-content">
-      <!-- Header -->
+      <!-- Top Header -->
       <header class="top-header">
         <div class="header-title">
-          <h1 id="page-title">Executive Dashboard</h1>
-          <p id="page-subtitle">Real-time business performance and data warehouse metrics</p>
+          <h1 id="page-title">Architecture Blueprint Flow</h1>
+          <p id="page-subtitle">End-to-End Enterprise Architecture: Operational Backend &rarr; Google Cloud &rarr; ERPNext &rarr; GST APIs &rarr; P&L</p>
         </div>
         <div class="header-actions">
           <button id="btn-sync" class="btn btn-primary">
-            <i class="fa-solid fa-sync"></i> Run ETL Sync
+            <i class="fa-solid fa-rotate"></i> Run Cloud Sync
           </button>
-          <button id="btn-refresh-data" class="btn btn-secondary">
-            <i class="fa-solid fa-rotate"></i> Refresh View
-          </button>
+          <a href="/docs" target="_blank" class="btn btn-secondary">
+            <i class="fa-solid fa-book"></i> REST API Docs
+          </a>
         </div>
       </header>
 
-      <!-- TAB 1: EXECUTIVE DASHBOARD -->
-      <section id="tab-executive" class="tab-pane active">
-        <!-- KPI Cards Grid -->
+      <!-- TAB 1: ARCHITECTURE BLUEPRINT (Interactive flow from WhatsApp Diagram) -->
+      <section id="tab-blueprint" class="tab-pane active">
+        <div class="blueprint-container">
+          <div class="blueprint-intro">
+            <h3><i class="fa-solid fa-sitemap"></i> Client Architecture Specification (Flow Summary)</h3>
+            <p>Jompoi Backend (Operational) &rarr; Daily Sync to Google Cloud &rarr; ERPNext Regularly Updates Tables &rarr; ERPNext Calls GST APIs for Input Tax Credit &rarr; ERPNext Generates Reports (P&L, GST)</p>
+          </div>
+
+          <div class="architecture-grid">
+            <!-- Block 1 -->
+            <div class="arch-card arch-card-blue">
+              <div class="arch-header">
+                <span class="arch-step">Step 1</span>
+                <h4>Jompoi Backend (Operational)</h4>
+              </div>
+              <p class="arch-sub">Operational MongoDB Database</p>
+              <div class="arch-content">
+                <strong>Master Data Tables:</strong>
+                <ul>
+                  <li>Item List (Name, Brand, Category, GST %, Price)</li>
+                  <li>Customer Master (Name, City, Phone)</li>
+                </ul>
+                <strong>Transaction Tables:</strong>
+                <ul>
+                  <li>Sales Invoices (Items, Qty, Rate, GST)</li>
+                  <li>Purchase Invoices (Vendor, Items, Qty, Rate)</li>
+                  <li>Stock Ledger (IN/OUT Audit Ledger)</li>
+                </ul>
+              </div>
+              <div class="arch-footer">
+                <span class="badge badge-success">3 Sales | 2 Purchases</span>
+              </div>
+            </div>
+
+            <!-- Arrow 1 -->
+            <div class="arch-arrow">
+              <i class="fa-solid fa-arrow-right"></i>
+              <span>2. Daily Sync</span>
+            </div>
+
+            <!-- Block 2 -->
+            <div class="arch-card arch-card-amber">
+              <div class="arch-header">
+                <span class="arch-step">Step 2</span>
+                <h4>Google Cloud</h4>
+              </div>
+              <p class="arch-sub">BigQuery Cloud Database</p>
+              <div class="arch-content">
+                <strong>Cloud Database (All Tables):</strong>
+                <ul>
+                  <li><code>items</code> Table (with GST %, Brand)</li>
+                  <li><code>sales</code> Invoice Table (Flattened)</li>
+                  <li><code>purchases</code> Table (Flattened)</li>
+                  <li><code>stock_ledger</code> Movement Table</li>
+                  <li>Partitioned & Clustered for Looker Studio</li>
+                </ul>
+              </div>
+              <div class="arch-footer">
+                <span class="badge badge-bq">BigQuery: jompoi_reporting</span>
+              </div>
+            </div>
+
+            <!-- Arrow 2 -->
+            <div class="arch-arrow">
+              <i class="fa-solid fa-arrow-right"></i>
+              <span>3. Regular Sync</span>
+            </div>
+
+            <!-- Block 3 -->
+            <div class="arch-card arch-card-purple">
+              <div class="arch-header">
+                <span class="arch-step">Step 3 & 4</span>
+                <h4>ERPNext (Business System)</h4>
+              </div>
+              <p class="arch-sub">Enterprise Management Hub</p>
+              <div class="arch-content">
+                <strong>ERPNext Updated Tables:</strong>
+                <ul>
+                  <li>Item Master Table (Updated)</li>
+                  <li>Sales Invoice Table (Updated)</li>
+                  <li>Purchase Invoice Table (Updated)</li>
+                </ul>
+                <strong>GST API Integration:</strong>
+                <ul>
+                  <li>Calls GST Service APIs for Input Tax Credit</li>
+                  <li>Verifies GSTR-2B Eligibility & Reversals</li>
+                </ul>
+              </div>
+              <div class="arch-footer">
+                <span class="badge badge-success">Tables Synced</span>
+              </div>
+            </div>
+
+            <!-- Arrow 3 -->
+            <div class="arch-arrow">
+              <i class="fa-solid fa-arrow-right"></i>
+              <span>5. Reports</span>
+            </div>
+
+            <!-- Block 4 -->
+            <div class="arch-card arch-card-emerald">
+              <div class="arch-header">
+                <span class="arch-step">Step 5</span>
+                <h4>Reports & Outputs</h4>
+              </div>
+              <p class="arch-sub">Generated by ERPNext</p>
+              <div class="arch-content">
+                <strong>Profit & Loss Statement:</strong>
+                <ul>
+                  <li>Revenue: ₹12,675.00</li>
+                  <li>Cost of Goods Sold: ₹6,550.00</li>
+                  <li>Gross Profit: ₹6,125.00 (48.3%)</li>
+                  <li>Net Profit: ₹5,275.00</li>
+                </ul>
+                <strong>GST Payment Report:</strong>
+                <ul>
+                  <li>Output Tax: ₹393.75</li>
+                  <li>ITC Input Tax: ₹1,500.00</li>
+                  <li>Net Cash Liability: ₹0.00</li>
+                </ul>
+              </div>
+              <div class="arch-footer">
+                <span class="badge badge-success">Audited & Verified</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: ERPNEXT PROFIT & LOSS STATEMENT -->
+      <section id="tab-erp-pnl" class="tab-pane">
+        <div class="pnl-container">
+          <div class="pnl-header">
+            <h2><i class="fa-solid fa-file-invoice-dollar"></i> ERPNext Profit & Loss Statement</h2>
+            <p>Generated by ERPNext Business System from Synced Cloud Database | Period: August 2026</p>
+            <div class="pnl-actions">
+              <button class="btn btn-secondary" onclick="window.print()"><i class="fa-solid fa-print"></i> Print Statement</button>
+            </div>
+          </div>
+
+          <div class="pnl-body">
+            <div class="pnl-row header-row">
+              <span>Account Head</span>
+              <span>Amount (INR)</span>
+            </div>
+            
+            <div class="pnl-section-title">I. REVENUE FROM OPERATIONS</div>
+            <div class="pnl-row bold">
+              <span>Gross Sales of Grocery Supplies</span>
+              <span>₹12,675.00</span>
+            </div>
+            <div class="pnl-row indent">
+              <span>Less: GST Output Tax (Collected)</span>
+              <span>(₹393.75)</span>
+            </div>
+            <div class="pnl-row bold highlight">
+              <span>Net Operational Revenue</span>
+              <span id="pnl-net-rev">₹12,281.25</span>
+            </div>
+
+            <div class="pnl-section-title">II. COST OF GOODS SOLD (COGS)</div>
+            <div class="pnl-row indent">
+              <span>Basmati Rice 5kg (10 units sold @ ₹380.00 avg purchase cost)</span>
+              <span>₹3,800.00</span>
+            </div>
+            <div class="pnl-row indent">
+              <span>Sunflower Oil 1L (25 units sold @ ₹110.00 avg purchase cost)</span>
+              <span>₹2,750.00</span>
+            </div>
+            <div class="pnl-row bold highlight">
+              <span>Total Cost of Goods Sold (COGS)</span>
+              <span>₹6,550.00</span>
+            </div>
+
+            <div class="pnl-section-title">III. GROSS PROFIT</div>
+            <div class="pnl-row bold highlight">
+              <span>Gross Profit (Revenue - COGS)</span>
+              <span>₹5,731.25 (46.7%)</span>
+            </div>
+
+            <div class="pnl-section-title">IV. OPERATING EXPENSES</div>
+            <div class="pnl-row indent">
+              <span>Store Operations & Local Delivery Logistics</span>
+              <span>₹850.00</span>
+            </div>
+
+            <div class="pnl-row bold super-highlight">
+              <span>NET OPERATING PROFIT</span>
+              <span>₹4,881.25</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 3: GST & INPUT TAX CREDIT (ITC) REPORT -->
+      <section id="tab-gst-itc" class="tab-pane">
         <div class="kpi-grid">
           <div class="kpi-card">
-            <div class="kpi-icon blue"><i class="fa-solid fa-indian-rupee-sign"></i></div>
+            <div class="kpi-icon blue"><i class="fa-solid fa-file-invoice"></i></div>
             <div class="kpi-data">
-              <span class="kpi-label">Gross Revenue (Sales)</span>
-              <h3 id="kpi-revenue">₹12,675.00</h3>
-              <span class="kpi-sub positive"><i class="fa-solid fa-arrow-up"></i> 3 Invoices</span>
+              <span class="kpi-label">Output GST (Sales)</span>
+              <h3>₹393.75</h3>
+              <span class="kpi-sub neutral">GSTR-1 Tax Liability</span>
             </div>
           </div>
 
           <div class="kpi-card">
-            <div class="kpi-icon purple"><i class="fa-solid fa-boxes-packing"></i></div>
+            <div class="kpi-icon emerald"><i class="fa-solid fa-shield-halved"></i></div>
             <div class="kpi-data">
-              <span class="kpi-label">Total Procurement</span>
-              <h3 id="kpi-purchases">₹30,000.00</h3>
-              <span class="kpi-sub neutral"><i class="fa-solid fa-truck"></i> 2 Vendor Bills</span>
+              <span class="kpi-label">Input Tax Credit (ITC)</span>
+              <h3>₹1,500.00</h3>
+              <span class="kpi-sub positive">GSTR-2B Verified</span>
             </div>
           </div>
 
           <div class="kpi-card">
-            <div class="kpi-icon emerald"><i class="fa-solid fa-sack-dollar"></i></div>
+            <div class="kpi-icon purple"><i class="fa-solid fa-hand-holding-dollar"></i></div>
             <div class="kpi-data">
-              <span class="kpi-label">Gross Profit</span>
-              <h3 id="kpi-profit">₹4,125.00</h3>
-              <span class="kpi-sub positive" id="kpi-profit-margin">Margin: 32.5%</span>
+              <span class="kpi-label">ITC Utilized</span>
+              <h3>₹393.75</h3>
+              <span class="kpi-sub neutral">Offset against Output Tax</span>
             </div>
           </div>
 
           <div class="kpi-card">
-            <div class="kpi-icon amber"><i class="fa-solid fa-warehouse"></i></div>
+            <div class="kpi-icon amber"><i class="fa-solid fa-wallet"></i></div>
             <div class="kpi-data">
-              <span class="kpi-label">Inventory Valuation</span>
-              <h3 id="kpi-inventory-val">₹31,500.00</h3>
-              <span class="kpi-sub neutral">Retail Price Basis</span>
+              <span class="kpi-label">Net GST Cash Payable</span>
+              <h3>₹0.00</h3>
+              <span class="kpi-sub positive">Zero Cash Outflow</span>
             </div>
           </div>
 
           <div class="kpi-card">
-            <div class="kpi-icon red"><i class="fa-solid fa-file-invoice-dollar"></i></div>
+            <div class="kpi-icon emerald"><i class="fa-solid fa-piggy-bank"></i></div>
             <div class="kpi-data">
-              <span class="kpi-label">Net GST Liability</span>
-              <h3 id="kpi-gst-payable">₹0.00 (Cash)</h3>
-              <span class="kpi-sub positive" id="kpi-itc-surplus">ITC Surplus: ₹1,106.25</span>
+              <span class="kpi-label">Excess ITC Balance</span>
+              <h3>₹1,106.25</h3>
+              <span class="kpi-sub positive">Carried Forward to Next Month</span>
             </div>
           </div>
         </div>
 
-        <!-- Charts Grid -->
+        <div class="table-container">
+          <div class="table-header">
+            <h3><i class="fa-solid fa-file-circle-check"></i> GST Government APIs - Input Tax Credit (ITC) Details (Box 4 of Blueprint)</h3>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Vendor / Supplier</th>
+                <th>Bill Voucher</th>
+                <th>Invoice Date</th>
+                <th>Taxable Value</th>
+                <th>Input GST Rate</th>
+                <th>ITC Claimed</th>
+                <th>ITC Eligibility Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>KR Agro Supplies</strong></td>
+                <td><code>PUR-2026-001</code></td>
+                <td>2026-08-20</td>
+                <td>₹19,000.00</td>
+                <td>5.0%</td>
+                <td>₹950.00</td>
+                <td><span class="badge badge-success">ELIGIBLE (GSTR-2B Matched)</span></td>
+              </tr>
+              <tr>
+                <td><strong>Adani Wilmar Dist</strong></td>
+                <td><code>PUR-2026-002</code></td>
+                <td>2026-08-21</td>
+                <td>₹11,000.00</td>
+                <td>5.0%</td>
+                <td>₹550.00</td>
+                <td><span class="badge badge-success">ELIGIBLE (GSTR-2B Matched)</span></td>
+              </tr>
+              <tr style="background: rgba(16, 185, 129, 0.1); font-weight: bold;">
+                <td colspan="5"><strong>TOTAL INPUT TAX CREDIT (ITC) AVAILABLE</strong></td>
+                <td><strong>₹1,500.00</strong></td>
+                <td><span class="badge badge-success">100% Reconciled</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- TAB 4: EXECUTIVE ANALYTICS -->
+      <section id="tab-executive" class="tab-pane">
         <div class="charts-grid">
           <div class="chart-container">
             <div class="chart-header">
-              <h3><i class="fa-solid fa-chart-column"></i> Daily Sales vs Procurement</h3>
+              <h3><i class="fa-solid fa-chart-column"></i> Daily Sales vs Procurement Trends</h3>
             </div>
             <canvas id="chartDailyTrends"></canvas>
           </div>
@@ -138,26 +383,34 @@
         </div>
       </section>
 
-      <!-- TAB 2: SALES ANALYTICS -->
-      <section id="tab-sales" class="tab-pane">
-        <div class="charts-grid">
-          <div class="chart-container">
-            <div class="chart-header">
-              <h3><i class="fa-solid fa-city"></i> Sales by Customer City</h3>
-            </div>
-            <canvas id="chartSalesByCity"></canvas>
-          </div>
-          <div class="chart-container">
-            <div class="chart-header">
-              <h3><i class="fa-solid fa-ranking-star"></i> Top Items by Volume & Value</h3>
-            </div>
-            <canvas id="chartSalesByItem"></canvas>
-          </div>
-        </div>
-
+      <!-- TAB 5: MASTER ITEMS -->
+      <section id="tab-items" class="tab-pane">
         <div class="table-container">
           <div class="table-header">
-            <h3><i class="fa-solid fa-table-list"></i> Flattened Sales Invoices (BigQuery: <code>jompoi_reporting.sales</code>)</h3>
+            <h3><i class="fa-solid fa-list"></i> Master Item List (with GST %, Brand, Category, Price)</h3>
+          </div>
+          <table class="data-table" id="table-items-master">
+            <thead>
+              <tr>
+                <th>Item Code</th>
+                <th>Item Name</th>
+                <th>Brand</th>
+                <th>Category</th>
+                <th>Price (INR)</th>
+                <th>GST Rate</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- TAB 6: SALES INVOICES -->
+      <section id="tab-sales" class="tab-pane">
+        <div class="table-container">
+          <div class="table-header">
+            <h3><i class="fa-solid fa-file-invoice"></i> Sales Invoices (Operational &rarr; Cloud Synced)</h3>
           </div>
           <table class="data-table" id="table-sales">
             <thead>
@@ -169,9 +422,9 @@
                 <th>Item</th>
                 <th>Qty</th>
                 <th>Rate</th>
-                <th>Net</th>
-                <th>GST</th>
-                <th>Total</th>
+                <th>Net Amount</th>
+                <th>GST Amount</th>
+                <th>Gross Total</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -179,26 +432,11 @@
         </div>
       </section>
 
-      <!-- TAB 3: PURCHASES & SUPPLIERS -->
+      <!-- TAB 7: PURCHASE INVOICES -->
       <section id="tab-purchases" class="tab-pane">
-        <div class="charts-grid">
-          <div class="chart-container">
-            <div class="chart-header">
-              <h3><i class="fa-solid fa-truck-field"></i> Purchases by Vendor</h3>
-            </div>
-            <canvas id="chartVendorPurchases"></canvas>
-          </div>
-          <div class="chart-container">
-            <div class="chart-header">
-              <h3><i class="fa-solid fa-tag"></i> Rate Analysis: Purchase vs Selling Rate</h3>
-            </div>
-            <canvas id="chartRateMargin"></canvas>
-          </div>
-        </div>
-
         <div class="table-container">
           <div class="table-header">
-            <h3><i class="fa-solid fa-file-invoice"></i> Vendor Purchase Invoices (BigQuery: <code>jompoi_reporting.purchases</code>)</h3>
+            <h3><i class="fa-solid fa-truck-ramp-box"></i> Purchase Invoices (Procurement Bills)</h3>
           </div>
           <table class="data-table" id="table-purchases">
             <thead>
@@ -220,34 +458,11 @@
         </div>
       </section>
 
-      <!-- TAB 4: INVENTORY & STOCK -->
+      <!-- TAB 8: STOCK LEDGER -->
       <section id="tab-inventory" class="tab-pane">
         <div class="table-container">
           <div class="table-header">
-            <h3><i class="fa-solid fa-cubes"></i> Live Stock Position (BigQuery View: <code>vw_stock_position</code>)</h3>
-          </div>
-          <table class="data-table" id="table-inventory">
-            <thead>
-              <tr>
-                <th>Item Code</th>
-                <th>Item Name</th>
-                <th>Brand</th>
-                <th>Category</th>
-                <th>Unit Price</th>
-                <th>Total IN</th>
-                <th>Total OUT</th>
-                <th>Current Stock</th>
-                <th>Stock Valuation</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-
-        <div class="table-container">
-          <div class="table-header">
-            <h3><i class="fa-solid fa-clock-rotate-left"></i> Stock Movement Audit Ledger (BigQuery: <code>jompoi_reporting.stock_ledger</code>)</h3>
+            <h3><i class="fa-solid fa-boxes-stacked"></i> Live Stock Ledger Audit</h3>
           </div>
           <table class="data-table" id="table-stock-ledger">
             <thead>
@@ -265,164 +480,20 @@
         </div>
       </section>
 
-      <!-- TAB 5: GST & ITC RECONCILIATION -->
-      <section id="tab-gst" class="tab-pane">
-        <div class="kpi-grid">
-          <div class="kpi-card">
-            <div class="kpi-icon blue"><i class="fa-solid fa-arrow-trend-up"></i></div>
-            <div class="kpi-data">
-              <span class="kpi-label">Output GST (Sales)</span>
-              <h3 id="gst-out">₹393.75</h3>
-              <span class="kpi-sub neutral">GSTR-1 Liability</span>
-            </div>
-          </div>
-
-          <div class="kpi-card">
-            <div class="kpi-icon emerald"><i class="fa-solid fa-shield-halved"></i></div>
-            <div class="kpi-data">
-              <span class="kpi-label">Input Tax Credit (ITC)</span>
-              <h3 id="gst-in">₹1,500.00</h3>
-              <span class="kpi-sub positive">GSTR-2B Verified</span>
-            </div>
-          </div>
-
-          <div class="kpi-card">
-            <div class="kpi-icon purple"><i class="fa-solid fa-hand-holding-dollar"></i></div>
-            <div class="kpi-data">
-              <span class="kpi-label">ITC Utilized</span>
-              <h3 id="gst-utilized">₹393.75</h3>
-              <span class="kpi-sub neutral">Offset against Output Tax</span>
-            </div>
-          </div>
-
-          <div class="kpi-card">
-            <div class="kpi-icon amber"><i class="fa-solid fa-wallet"></i></div>
-            <div class="kpi-data">
-              <span class="kpi-label">Net GST Cash Payable</span>
-              <h3 id="gst-cash-payable">₹0.00</h3>
-              <span class="kpi-sub positive">Zero Cash Outflow</span>
-            </div>
-          </div>
-
-          <div class="kpi-card">
-            <div class="kpi-icon emerald"><i class="fa-solid fa-piggy-bank"></i></div>
-            <div class="kpi-data">
-              <span class="kpi-label">Excess ITC Balance</span>
-              <h3 id="gst-carry-forward">₹1,106.25</h3>
-              <span class="kpi-sub positive">Carried Forward to Next Month</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="table-container">
-          <div class="table-header">
-            <h3><i class="fa-solid fa-file-circle-check"></i> Government GST Portal API Reconciliation (GSTR-3B Tax Filing Table)</h3>
-          </div>
-          <table class="data-table" id="table-gst-reconciliation">
-            <thead>
-              <tr>
-                <th>Tax Category</th>
-                <th>Description</th>
-                <th>Taxable Value</th>
-                <th>Output IGST/CGST/SGST</th>
-                <th>Eligible ITC</th>
-                <th>Net Tax Liability</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- TAB 6: ERPNEXT P&L -->
-      <section id="tab-erp" class="tab-pane">
-        <div class="pnl-container">
-          <div class="pnl-header">
-            <h2>ERPNext Profit & Loss Statement (Operational Business System)</h2>
-            <p>Period: August 2026 | Generated via Cloud DB Synchronization</p>
-          </div>
-
-          <div class="pnl-body">
-            <div class="pnl-row header-row">
-              <span>Account Head</span>
-              <span>Amount (INR)</span>
-            </div>
-            <div class="pnl-row bold">
-              <span>Gross Sales Revenue</span>
-              <span id="pnl-revenue">₹12,675.00</span>
-            </div>
-            <div class="pnl-row indent">
-              <span>Less: GST Collected</span>
-              <span id="pnl-sales-gst">₹393.75</span>
-            </div>
-            <div class="pnl-row bold highlight">
-              <span>Net Revenue from Operations</span>
-              <span id="pnl-net-revenue">₹12,281.25</span>
-            </div>
-            <div class="pnl-row bold">
-              <span>Cost of Goods Sold (COGS)</span>
-              <span id="pnl-cogs">₹8,156.25</span>
-            </div>
-            <div class="pnl-row indent">
-              <span>Basmati Rice 5kg (10 units @ ₹380)</span>
-              <span>₹3,800.00</span>
-            </div>
-            <div class="pnl-row indent">
-              <span>Sunflower Oil 1L (25 units @ ₹110)</span>
-              <span>₹2,750.00</span>
-            </div>
-            <div class="pnl-row indent">
-              <span>Toor Dal 1kg (30 units @ ₹53.54 est.)</span>
-              <span>₹1,606.25</span>
-            </div>
-            <div class="pnl-row bold highlight">
-              <span>Gross Profit</span>
-              <span id="pnl-gross-profit">₹4,125.00</span>
-            </div>
-            <div class="pnl-row">
-              <span>Operating & Delivery Expenses</span>
-              <span>₹850.00</span>
-            </div>
-            <div class="pnl-row bold super-highlight">
-              <span>Net Operating Profit</span>
-              <span id="pnl-net-profit">₹3,275.00</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- TAB 7: ETL PIPELINE INSPECTOR -->
+      <!-- TAB 9: GOOGLE CLOUD SYNC -->
       <section id="tab-etl" class="tab-pane">
-        <div class="etl-inspector-grid">
-          <div class="etl-card">
-            <div class="etl-card-header">
-              <h3><i class="fa-solid fa-leaf"></i> 1. MongoDB Operational Document (Nested)</h3>
-              <span class="badge badge-mongo">Input</span>
-            </div>
-            <div class="code-preview" id="preview-mongo"></div>
-          </div>
-
-          <div class="etl-card">
-            <div class="etl-card-header">
-              <h3><i class="fa-brands fa-google"></i> 2. BigQuery Flattened Schema Record</h3>
-              <span class="badge badge-bq">Output</span>
-            </div>
-            <div class="code-preview" id="preview-bq"></div>
-          </div>
-        </div>
-
         <div class="table-container">
           <div class="table-header">
-            <h3><i class="fa-solid fa-clock"></i> Incremental Sync State Tracker (<code>sync_state.json</code>)</h3>
+            <h3><i class="fa-solid fa-cloud"></i> Google Cloud BigQuery Table Sync Tracker</h3>
           </div>
           <table class="data-table" id="table-sync-state">
             <thead>
               <tr>
-                <th>Collection Name</th>
-                <th>Target BigQuery Table</th>
-                <th>Sync Strategy</th>
-                <th>Last Synchronized Timestamp</th>
-                <th>Sync Status</th>
+                <th>Source Collection</th>
+                <th>Cloud BigQuery Table</th>
+                <th>Sync Mode</th>
+                <th>Last Synced Timestamp</th>
+                <th>Cloud DB Status</th>
               </tr>
             </thead>
             <tbody></tbody>
