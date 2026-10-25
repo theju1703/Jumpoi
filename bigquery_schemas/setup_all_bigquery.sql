@@ -8,10 +8,9 @@
 CREATE SCHEMA IF NOT EXISTS `jompoi_reporting`
 OPTIONS (location = 'US');
 
--- 2. CREATE MASTER TABLES
-CREATE TABLE IF NOT EXISTS `jompoi_reporting.customers` (
+-- 2. CREATE OR REPLACE MASTER & TRANSACTION TABLES
+CREATE OR REPLACE TABLE `jompoi_reporting.customers` (
   _id STRING,
-  customer_id STRING,
   name STRING,
   city STRING,
   phone STRING,
@@ -19,7 +18,7 @@ CREATE TABLE IF NOT EXISTS `jompoi_reporting.customers` (
   updated_at TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS `jompoi_reporting.items` (
+CREATE OR REPLACE TABLE `jompoi_reporting.items` (
   _id STRING,
   item_code STRING,
   name STRING,
@@ -31,7 +30,7 @@ CREATE TABLE IF NOT EXISTS `jompoi_reporting.items` (
   updated_at TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS `jompoi_reporting.sales` (
+CREATE OR REPLACE TABLE `jompoi_reporting.sales` (
   _id STRING,
   invoice_no STRING,
   invoice_date DATE,
@@ -51,7 +50,7 @@ CREATE TABLE IF NOT EXISTS `jompoi_reporting.sales` (
 PARTITION BY invoice_date
 CLUSTER BY customer_city, item_code;
 
-CREATE TABLE IF NOT EXISTS `jompoi_reporting.purchases` (
+CREATE OR REPLACE TABLE `jompoi_reporting.purchases` (
   _id STRING,
   invoice_no STRING,
   invoice_date DATE,
@@ -70,7 +69,7 @@ CREATE TABLE IF NOT EXISTS `jompoi_reporting.purchases` (
 PARTITION BY invoice_date
 CLUSTER BY vendor, item_code;
 
-CREATE TABLE IF NOT EXISTS `jompoi_reporting.stock_ledger` (
+CREATE OR REPLACE TABLE `jompoi_reporting.stock_ledger` (
   _id STRING,
   item_code STRING,
   item_name STRING,
@@ -84,7 +83,7 @@ CREATE TABLE IF NOT EXISTS `jompoi_reporting.stock_ledger` (
 PARTITION BY date
 CLUSTER BY item_code;
 
-CREATE TABLE IF NOT EXISTS `jompoi_reporting.orders` (
+CREATE OR REPLACE TABLE `jompoi_reporting.orders` (
   _id STRING,
   order_id STRING,
   customer_name STRING,
@@ -99,14 +98,12 @@ PARTITION BY order_date
 CLUSTER BY customer_city;
 
 -- 3. INSERT SAMPLE REPLICATED DATA
-DELETE FROM `jompoi_reporting.customers` WHERE TRUE;
-INSERT INTO `jompoi_reporting.customers` (_id, customer_id, name, city, phone, created_at, updated_at)
+INSERT INTO `jompoi_reporting.customers` (_id, name, city, phone, created_at, updated_at)
 VALUES
-  ('CUST001', 'C001', 'ABC Stores', 'Chennai', '9876543210', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()),
-  ('CUST002', 'C002', 'Sri Murugan Supermarket', 'Madurai', '9876543211', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()),
-  ('CUST003', 'C003', 'Kovai Fresh Mart', 'Coimbatore', '9876543212', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP());
+  ('CUST001', 'ABC Stores', 'Chennai', '9876543210', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()),
+  ('CUST002', 'Sri Murugan Supermarket', 'Madurai', '9876543211', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()),
+  ('CUST003', 'Kovai Fresh Mart', 'Coimbatore', '9876543212', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP());
 
-DELETE FROM `jompoi_reporting.items` WHERE TRUE;
 INSERT INTO `jompoi_reporting.items` (_id, item_code, name, brand, category, price, gst_percent, created_at, updated_at)
 VALUES
   ('ITM001', 'ITM001', 'Basmati Rice 5kg', 'India Gate', 'Grains & Rice', 450.0, 5.0, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()),
@@ -114,7 +111,6 @@ VALUES
   ('ITM003', 'ITM003', 'Toor Dal 1kg', 'Tata Sampann', 'Pulses', 160.0, 0.0, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()),
   ('ITM004', 'ITM004', 'Milk 500ml', 'Aavin', 'Dairy', 25.0, 0.0, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP());
 
-DELETE FROM `jompoi_reporting.sales` WHERE TRUE;
 INSERT INTO `jompoi_reporting.sales` (
   _id, invoice_no, invoice_date, customer_name, customer_city,
   item_code, item_name, quantity, rate, net_amount, gst_percent, gst_amount, total_amount,
@@ -125,7 +121,6 @@ VALUES
   ('INV002', 'INV-2026-002', DATE '2026-08-24', 'Sri Murugan Supermarket', 'Madurai', 'ITM002', 'Sunflower Oil 1L', 25, 135.0, 3375.0, 5.0, 168.75, 3543.75, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()),
   ('INV003', 'INV-2026-003', DATE '2026-08-25', 'Kovai Fresh Mart', 'Coimbatore', 'ITM003', 'Toor Dal 1kg', 30, 160.0, 4800.0, 0.0, 0.0, 4800.0, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP());
 
-DELETE FROM `jompoi_reporting.purchases` WHERE TRUE;
 INSERT INTO `jompoi_reporting.purchases` (
   _id, invoice_no, invoice_date, vendor,
   item_code, item_name, quantity, rate, net_amount, gst_percent, gst_amount, total_amount,
@@ -135,7 +130,6 @@ VALUES
   ('PINV001', 'PUR-2026-001', DATE '2026-08-20', 'KR Agro Supplies', 'ITM001', 'Basmati Rice 5kg', 50, 380.0, 19000.0, 5.0, 950.0, 19950.0, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()),
   ('PINV002', 'PUR-2026-002', DATE '2026-08-21', 'Adani Wilmar Dist', 'ITM002', 'Sunflower Oil 1L', 100, 110.0, 11000.0, 5.0, 550.0, 11550.0, CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP());
 
-DELETE FROM `jompoi_reporting.stock_ledger` WHERE TRUE;
 INSERT INTO `jompoi_reporting.stock_ledger` (
   _id, item_code, item_name, transaction_type, quantity, voucher_no, date, created_at, updated_at
 )
@@ -146,7 +140,6 @@ VALUES
   ('STK004', 'ITM002', 'Sunflower Oil 1L', 'OUT', 25, 'INV-2026-002', DATE '2026-08-24', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()),
   ('STK005', 'ITM003', 'Toor Dal 1kg', 'OUT', 30, 'INV-2026-003', DATE '2026-08-25', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP());
 
-DELETE FROM `jompoi_reporting.orders` WHERE TRUE;
 INSERT INTO `jompoi_reporting.orders` (
   _id, order_id, customer_name, customer_city, order_date, amount, status, created_at, updated_at
 )
