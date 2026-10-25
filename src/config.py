@@ -10,7 +10,7 @@ MONGO_URI = os.environ.get("MONGO_URI", "mongodb://localhost:27017/")
 MONGO_DB_NAME = os.environ.get("MONGO_DB_NAME", "jompoi_db")
 
 # Google Cloud BigQuery Config
-BQ_PROJECT_ID = os.environ.get("BQ_PROJECT_ID", "jompoi-grocery-analytics")
+BQ_PROJECT_ID = os.environ.get("BQ_PROJECT_ID", "project-b6567b21-77eb-47fb-926")
 BQ_DATASET_ID = os.environ.get("BQ_DATASET_ID", "jompoi_reporting")
 BQ_LOCATION = os.environ.get("BQ_LOCATION", "US")
 

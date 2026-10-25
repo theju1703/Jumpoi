@@ -34,7 +34,7 @@ services:
     environment:
       - MONGO_URI=mongodb://mongodb:27017/
       - MONGO_DB_NAME=jompoi_db
-      - BQ_PROJECT_ID=jompoi-grocery-analytics
+      - BQ_PROJECT_ID=project-b6567b21-77eb-47fb-926
       - BQ_DATASET_ID=jompoi_reporting
     depends_on:
       - mongodb
