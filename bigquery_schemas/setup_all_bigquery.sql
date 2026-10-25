@@ -4,12 +4,14 @@
 -- (https://console.cloud.google.com/bigquery) and click RUN.
 -- ====================================================================
 
--- 1. CREATE DATASET
-CREATE SCHEMA IF NOT EXISTS `jompoi_reporting`
+-- 1. CLEAN RE-CREATION OF DATASET (CASCADE removes old non-partitioned tables)
+DROP SCHEMA IF EXISTS `jompoi_reporting` CASCADE;
+
+CREATE SCHEMA `jompoi_reporting`
 OPTIONS (location = 'US');
 
--- 2. CREATE OR REPLACE MASTER & TRANSACTION TABLES
-CREATE OR REPLACE TABLE `jompoi_reporting.customers` (
+-- 2. CREATE FRESH PARTITIONED MASTER & TRANSACTION TABLES
+CREATE TABLE `jompoi_reporting.customers` (
   _id STRING,
   name STRING,
   city STRING,
@@ -18,7 +20,7 @@ CREATE OR REPLACE TABLE `jompoi_reporting.customers` (
   updated_at TIMESTAMP
 );
 
-CREATE OR REPLACE TABLE `jompoi_reporting.items` (
+CREATE TABLE `jompoi_reporting.items` (
   _id STRING,
   item_code STRING,
   name STRING,
@@ -30,7 +32,7 @@ CREATE OR REPLACE TABLE `jompoi_reporting.items` (
   updated_at TIMESTAMP
 );
 
-CREATE OR REPLACE TABLE `jompoi_reporting.sales` (
+CREATE TABLE `jompoi_reporting.sales` (
   _id STRING,
   invoice_no STRING,
   invoice_date DATE,
@@ -50,7 +52,7 @@ CREATE OR REPLACE TABLE `jompoi_reporting.sales` (
 PARTITION BY invoice_date
 CLUSTER BY customer_city, item_code;
 
-CREATE OR REPLACE TABLE `jompoi_reporting.purchases` (
+CREATE TABLE `jompoi_reporting.purchases` (
   _id STRING,
   invoice_no STRING,
   invoice_date DATE,
@@ -69,7 +71,7 @@ CREATE OR REPLACE TABLE `jompoi_reporting.purchases` (
 PARTITION BY invoice_date
 CLUSTER BY vendor, item_code;
 
-CREATE OR REPLACE TABLE `jompoi_reporting.stock_ledger` (
+CREATE TABLE `jompoi_reporting.stock_ledger` (
   _id STRING,
   item_code STRING,
   item_name STRING,
@@ -83,7 +85,7 @@ CREATE OR REPLACE TABLE `jompoi_reporting.stock_ledger` (
 PARTITION BY date
 CLUSTER BY item_code;
 
-CREATE OR REPLACE TABLE `jompoi_reporting.orders` (
+CREATE TABLE `jompoi_reporting.orders` (
   _id STRING,
   order_id STRING,
   customer_name STRING,
@@ -97,7 +99,7 @@ CREATE OR REPLACE TABLE `jompoi_reporting.orders` (
 PARTITION BY order_date
 CLUSTER BY customer_city;
 
--- 3. INSERT SAMPLE REPLICATED DATA
+-- 3. INSERT REPLICATED OPERATIONAL DATA
 INSERT INTO `jompoi_reporting.customers` (_id, name, city, phone, created_at, updated_at)
 VALUES
   ('CUST001', 'ABC Stores', 'Chennai', '9876543210', CURRENT_TIMESTAMP(), CURRENT_TIMESTAMP()),
@@ -185,12 +187,18 @@ GROUP BY item_code, item_name;
 
 CREATE OR REPLACE VIEW `jompoi_reporting.vw_item_profitability` AS
 WITH sales_summary AS (
-  SELECT item_code, item_name, SUM(quantity) AS total_sold_qty, SUM(net_amount) AS total_revenue
+  SELECT
+    item_code,
+    item_name,
+    SUM(quantity) AS total_sold_qty,
+    SUM(net_amount) AS total_revenue
   FROM `jompoi_reporting.sales`
   GROUP BY item_code, item_name
 ),
 purchase_summary AS (
-  SELECT item_code, AVG(rate) AS avg_purchase_rate
+  SELECT
+    item_code,
+    AVG(rate) AS avg_purchase_rate
   FROM `jompoi_reporting.purchases`
   GROUP BY item_code
 )
@@ -207,12 +215,16 @@ LEFT JOIN purchase_summary p ON s.item_code = p.item_code;
 
 CREATE OR REPLACE VIEW `jompoi_reporting.vw_gst_summary` AS
 WITH output_gst AS (
-  SELECT invoice_date AS gst_date, SUM(gst_amount) AS output_tax
+  SELECT
+    invoice_date AS gst_date,
+    SUM(gst_amount) AS output_tax
   FROM `jompoi_reporting.sales`
   GROUP BY invoice_date
 ),
 input_gst AS (
-  SELECT invoice_date AS gst_date, SUM(gst_amount) AS input_tax_credit
+  SELECT
+    invoice_date AS gst_date,
+    SUM(gst_amount) AS input_tax_credit
   FROM `jompoi_reporting.purchases`
   GROUP BY invoice_date
 )
