@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Jompoi Grocery Data Pipeline & Analytics Hub</title>
+  <link rel="stylesheet" href="styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon"><i class="fa-solid fa-cart-shopping"></i></div>
+        <div class="brand-text">
+          <h2>Jompoi</h2>
+          <span>Analytics & Pipeline</span>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <button class="nav-item active" data-tab="tab-executive">
+          <i class="fa-solid fa-gauge-high"></i> Executive Dashboard
+        </button>
+        <button class="nav-item" data-tab="tab-sales">
+          <i class="fa-solid fa-chart-line"></i> Sales Analytics
+        </button>
+        <button class="nav-item" data-tab="tab-purchases">
+          <i class="fa-solid fa-truck-ramp-box"></i> Purchases & Suppliers
+        </button>
+        <button class="nav-item" data-tab="tab-inventory">
+          <i class="fa-solid fa-boxes-stacked"></i> Inventory & Stock
+        </button>
+        <button class="nav-item" data-tab="tab-gst">
+          <i class="fa-solid fa-receipt"></i> GST & ITC Reconciliation
+        </button>
+        <button class="nav-item" data-tab="tab-erp">
+          <i class="fa-solid fa-calculator"></i> ERPNext P&L Statement
+        </button>
+        <button class="nav-item" data-tab="tab-etl">
+          <i class="fa-solid fa-arrows-rotate"></i> ETL Pipeline Inspector
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="pipeline-badge">
+          <span class="status-indicator pulse"></span>
+          <span>Pipeline: Ready</span>
+        </div>
+        <small>BigQuery Dataset: <code>jompoi_reporting</code></small>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Header -->
+      <header class="top-header">
+        <div class="header-title">
+          <h1 id="page-title">Executive Dashboard</h1>
+          <p id="page-subtitle">Real-time business performance and data warehouse metrics</p>
+        </div>
+        <div class="header-actions">
+          <button id="btn-sync" class="btn btn-primary">
+            <i class="fa-solid fa-sync"></i> Run ETL Sync
+          </button>
+          <button id="btn-refresh-data" class="btn btn-secondary">
+            <i class="fa-solid fa-rotate"></i> Refresh View
+          </button>
+        </div>
+      </header>
+
+      <!-- TAB 1: EXECUTIVE DASHBOARD -->
+      <section id="tab-executive" class="tab-pane active">
+        <!-- KPI Cards Grid -->
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-icon blue"><i class="fa-solid fa-indian-rupee-sign"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Gross Revenue (Sales)</span>
+              <h3 id="kpi-revenue">₹12,675.00</h3>
+              <span class="kpi-sub positive"><i class="fa-solid fa-arrow-up"></i> 3 Invoices</span>
+            </div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-icon purple"><i class="fa-solid fa-boxes-packing"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Total Procurement</span>
+              <h3 id="kpi-purchases">₹30,000.00</h3>
+              <span class="kpi-sub neutral"><i class="fa-solid fa-truck"></i> 2 Vendor Bills</span>
+            </div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-icon emerald"><i class="fa-solid fa-sack-dollar"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Gross Profit</span>
+              <h3 id="kpi-profit">₹4,125.00</h3>
+              <span class="kpi-sub positive" id="kpi-profit-margin">Margin: 32.5%</span>
+            </div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-icon amber"><i class="fa-solid fa-warehouse"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Inventory Valuation</span>
+              <h3 id="kpi-inventory-val">₹31,500.00</h3>
+              <span class="kpi-sub neutral">Retail Price Basis</span>
+            </div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-icon red"><i class="fa-solid fa-file-invoice-dollar"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Net GST Liability</span>
+              <h3 id="kpi-gst-payable">₹0.00 (Cash)</h3>
+              <span class="kpi-sub positive" id="kpi-itc-surplus">ITC Surplus: ₹1,106.25</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts Grid -->
+        <div class="charts-grid">
+          <div class="chart-container">
+            <div class="chart-header">
+              <h3><i class="fa-solid fa-chart-column"></i> Daily Sales vs Procurement</h3>
+            </div>
+            <canvas id="chartDailyTrends"></canvas>
+          </div>
+          <div class="chart-container">
+            <div class="chart-header">
+              <h3><i class="fa-solid fa-pie-chart"></i> Sales by Grocery Category</h3>
+            </div>
+            <canvas id="chartCategoryShare"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: SALES ANALYTICS -->
+      <section id="tab-sales" class="tab-pane">
+        <div class="charts-grid">
+          <div class="chart-container">
+            <div class="chart-header">
+              <h3><i class="fa-solid fa-city"></i> Sales by Customer City</h3>
+            </div>
+            <canvas id="chartSalesByCity"></canvas>
+          </div>
+          <div class="chart-container">
+            <div class="chart-header">
+              <h3><i class="fa-solid fa-ranking-star"></i> Top Items by Volume & Value</h3>
+            </div>
+            <canvas id="chartSalesByItem"></canvas>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <div class="table-header">
+            <h3><i class="fa-solid fa-table-list"></i> Flattened Sales Invoices (BigQuery: <code>jompoi_reporting.sales</code>)</h3>
+          </div>
+          <table class="data-table" id="table-sales">
+            <thead>
+              <tr>
+                <th>Invoice No</th>
+                <th>Date</th>
+                <th>Customer</th>
+                <th>City</th>
+                <th>Item</th>
+                <th>Qty</th>
+                <th>Rate</th>
+                <th>Net</th>
+                <th>GST</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- TAB 3: PURCHASES & SUPPLIERS -->
+      <section id="tab-purchases" class="tab-pane">
+        <div class="charts-grid">
+          <div class="chart-container">
+            <div class="chart-header">
+              <h3><i class="fa-solid fa-truck-field"></i> Purchases by Vendor</h3>
+            </div>
+            <canvas id="chartVendorPurchases"></canvas>
+          </div>
+          <div class="chart-container">
+            <div class="chart-header">
+              <h3><i class="fa-solid fa-tag"></i> Rate Analysis: Purchase vs Selling Rate</h3>
+            </div>
+            <canvas id="chartRateMargin"></canvas>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <div class="table-header">
+            <h3><i class="fa-solid fa-file-invoice"></i> Vendor Purchase Invoices (BigQuery: <code>jompoi_reporting.purchases</code>)</h3>
+          </div>
+          <table class="data-table" id="table-purchases">
+            <thead>
+              <tr>
+                <th>Bill No</th>
+                <th>Date</th>
+                <th>Vendor</th>
+                <th>Item Code</th>
+                <th>Item Name</th>
+                <th>Qty</th>
+                <th>Rate</th>
+                <th>Net Amount</th>
+                <th>Input GST</th>
+                <th>Gross Total</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- TAB 4: INVENTORY & STOCK -->
+      <section id="tab-inventory" class="tab-pane">
+        <div class="table-container">
+          <div class="table-header">
+            <h3><i class="fa-solid fa-cubes"></i> Live Stock Position (BigQuery View: <code>vw_stock_position</code>)</h3>
+          </div>
+          <table class="data-table" id="table-inventory">
+            <thead>
+              <tr>
+                <th>Item Code</th>
+                <th>Item Name</th>
+                <th>Brand</th>
+                <th>Category</th>
+                <th>Unit Price</th>
+                <th>Total IN</th>
+                <th>Total OUT</th>
+                <th>Current Stock</th>
+                <th>Stock Valuation</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+
+        <div class="table-container">
+          <div class="table-header">
+            <h3><i class="fa-solid fa-clock-rotate-left"></i> Stock Movement Audit Ledger (BigQuery: <code>jompoi_reporting.stock_ledger</code>)</h3>
+          </div>
+          <table class="data-table" id="table-stock-ledger">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Item Code</th>
+                <th>Item Name</th>
+                <th>Transaction</th>
+                <th>Quantity</th>
+                <th>Voucher No</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- TAB 5: GST & ITC RECONCILIATION -->
+      <section id="tab-gst" class="tab-pane">
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-icon blue"><i class="fa-solid fa-arrow-trend-up"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Output GST (Sales)</span>
+              <h3 id="gst-out">₹393.75</h3>
+              <span class="kpi-sub neutral">GSTR-1 Liability</span>
+            </div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-icon emerald"><i class="fa-solid fa-shield-halved"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Input Tax Credit (ITC)</span>
+              <h3 id="gst-in">₹1,500.00</h3>
+              <span class="kpi-sub positive">GSTR-2B Verified</span>
+            </div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-icon purple"><i class="fa-solid fa-hand-holding-dollar"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">ITC Utilized</span>
+              <h3 id="gst-utilized">₹393.75</h3>
+              <span class="kpi-sub neutral">Offset against Output Tax</span>
+            </div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-icon amber"><i class="fa-solid fa-wallet"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Net GST Cash Payable</span>
+              <h3 id="gst-cash-payable">₹0.00</h3>
+              <span class="kpi-sub positive">Zero Cash Outflow</span>
+            </div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-icon emerald"><i class="fa-solid fa-piggy-bank"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Excess ITC Balance</span>
+              <h3 id="gst-carry-forward">₹1,106.25</h3>
+              <span class="kpi-sub positive">Carried Forward to Next Month</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <div class="table-header">
+            <h3><i class="fa-solid fa-file-circle-check"></i> Government GST Portal API Reconciliation (GSTR-3B Tax Filing Table)</h3>
+          </div>
+          <table class="data-table" id="table-gst-reconciliation">
+            <thead>
+              <tr>
+                <th>Tax Category</th>
+                <th>Description</th>
+                <th>Taxable Value</th>
+                <th>Output IGST/CGST/SGST</th>
+                <th>Eligible ITC</th>
+                <th>Net Tax Liability</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- TAB 6: ERPNEXT P&L -->
+      <section id="tab-erp" class="tab-pane">
+        <div class="pnl-container">
+          <div class="pnl-header">
+            <h2>ERPNext Profit & Loss Statement (Operational Business System)</h2>
+            <p>Period: August 2026 | Generated via Cloud DB Synchronization</p>
+          </div>
+
+          <div class="pnl-body">
+            <div class="pnl-row header-row">
+              <span>Account Head</span>
+              <span>Amount (INR)</span>
+            </div>
+            <div class="pnl-row bold">
+              <span>Gross Sales Revenue</span>
+              <span id="pnl-revenue">₹12,675.00</span>
+            </div>
+            <div class="pnl-row indent">
+              <span>Less: GST Collected</span>
+              <span id="pnl-sales-gst">₹393.75</span>
+            </div>
+            <div class="pnl-row bold highlight">
+              <span>Net Revenue from Operations</span>
+              <span id="pnl-net-revenue">₹12,281.25</span>
+            </div>
+            <div class="pnl-row bold">
+              <span>Cost of Goods Sold (COGS)</span>
+              <span id="pnl-cogs">₹8,156.25</span>
+            </div>
+            <div class="pnl-row indent">
+              <span>Basmati Rice 5kg (10 units @ ₹380)</span>
+              <span>₹3,800.00</span>
+            </div>
+            <div class="pnl-row indent">
+              <span>Sunflower Oil 1L (25 units @ ₹110)</span>
+              <span>₹2,750.00</span>
+            </div>
+            <div class="pnl-row indent">
+              <span>Toor Dal 1kg (30 units @ ₹53.54 est.)</span>
+              <span>₹1,606.25</span>
+            </div>
+            <div class="pnl-row bold highlight">
+              <span>Gross Profit</span>
+              <span id="pnl-gross-profit">₹4,125.00</span>
+            </div>
+            <div class="pnl-row">
+              <span>Operating & Delivery Expenses</span>
+              <span>₹850.00</span>
+            </div>
+            <div class="pnl-row bold super-highlight">
+              <span>Net Operating Profit</span>
+              <span id="pnl-net-profit">₹3,275.00</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 7: ETL PIPELINE INSPECTOR -->
+      <section id="tab-etl" class="tab-pane">
+        <div class="etl-inspector-grid">
+          <div class="etl-card">
+            <div class="etl-card-header">
+              <h3><i class="fa-solid fa-leaf"></i> 1. MongoDB Operational Document (Nested)</h3>
+              <span class="badge badge-mongo">Input</span>
+            </div>
+            <div class="code-preview" id="preview-mongo"></div>
+          </div>
+
+          <div class="etl-card">
+            <div class="etl-card-header">
+              <h3><i class="fa-brands fa-google"></i> 2. BigQuery Flattened Schema Record</h3>
+              <span class="badge badge-bq">Output</span>
+            </div>
+            <div class="code-preview" id="preview-bq"></div>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <div class="table-header">
+            <h3><i class="fa-solid fa-clock"></i> Incremental Sync State Tracker (<code>sync_state.json</code>)</h3>
+          </div>
+          <table class="data-table" id="table-sync-state">
+            <thead>
+              <tr>
+                <th>Collection Name</th>
+                <th>Target BigQuery Table</th>
+                <th>Sync Strategy</th>
+                <th>Last Synchronized Timestamp</th>
+                <th>Sync Status</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

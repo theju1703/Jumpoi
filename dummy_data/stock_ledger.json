@@ -1,0 +1,24 @@
+[
+  {
+    "_id": "STK001",
+    "item_code": "ITM001",
+    "item_name": "Basmati Rice 5kg",
+    "transaction_type": "IN",
+    "quantity": 50,
+    "voucher_no": "PUR-2026-001",
+    "date": "2026-08-20",
+    "created_at": "2026-08-20T08:30:00Z",
+    "updated_at": "2026-08-20T08:30:00Z"
+  },
+  {
+    "_id": "STK002",
+    "item_code": "ITM001",
+    "item_name": "Basmati Rice 5kg",
+    "transaction_type": "OUT",
+    "quantity": 10,
+    "voucher_no": "INV-2026-001",
+    "date": "2026-08-24",
+    "created_at": "2026-08-24T10:30:00Z",
+    "updated_at": "2026-08-24T10:30:00Z"
+  }
+]

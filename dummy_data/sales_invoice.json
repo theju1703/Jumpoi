@@ -1,0 +1,59 @@
+[
+  {
+    "_id": "INV001",
+    "invoice_no": "INV-2026-001",
+    "invoice_date": "2026-08-24",
+    "customer": {
+      "name": "ABC Stores",
+      "city": "Chennai"
+    },
+    "item_code": "ITM001",
+    "item_name": "Basmati Rice 5kg",
+    "quantity": 10,
+    "rate": 450.0,
+    "net_amount": 4500.0,
+    "gst_percent": 5.0,
+    "gst_amount": 225.0,
+    "total_amount": 4725.0,
+    "created_at": "2026-08-24T10:30:00Z",
+    "updated_at": "2026-08-24T10:30:00Z"
+  },
+  {
+    "_id": "INV002",
+    "invoice_no": "INV-2026-002",
+    "invoice_date": "2026-08-24",
+    "customer": {
+      "name": "Sri Murugan Supermarket",
+      "city": "Madurai"
+    },
+    "item_code": "ITM002",
+    "item_name": "Sunflower Oil 1L",
+    "quantity": 25,
+    "rate": 135.0,
+    "net_amount": 3375.0,
+    "gst_percent": 5.0,
+    "gst_amount": 168.75,
+    "total_amount": 3543.75,
+    "created_at": "2026-08-24T14:15:00Z",
+    "updated_at": "2026-08-24T14:15:00Z"
+  },
+  {
+    "_id": "INV003",
+    "invoice_no": "INV-2026-003",
+    "invoice_date": "2026-08-25",
+    "customer": {
+      "name": "Kovai Fresh Mart",
+      "city": "Coimbatore"
+    },
+    "item_code": "ITM003",
+    "item_name": "Toor Dal 1kg",
+    "quantity": 30,
+    "rate": 160.0,
+    "net_amount": 4800.0,
+    "gst_percent": 0.0,
+    "gst_amount": 0.0,
+    "total_amount": 4800.0,
+    "created_at": "2026-08-25T11:00:00Z",
+    "updated_at": "2026-08-25T11:00:00Z"
+  }
+]

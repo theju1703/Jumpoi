@@ -1,0 +1,41 @@
+[
+  {
+    "_id": "ORD001",
+    "order_id": "ORD001",
+    "customer": {
+      "name": "ABC Stores",
+      "city": "Chennai"
+    },
+    "date": "2026-08-24",
+    "amount": 12500.0,
+    "status": "DELIVERED",
+    "created_at": "2026-08-24T10:00:00Z",
+    "updated_at": "2026-08-24T10:00:00Z"
+  },
+  {
+    "_id": "ORD002",
+    "order_id": "ORD002",
+    "customer": {
+      "name": "Sri Murugan Supermarket",
+      "city": "Madurai"
+    },
+    "date": "2026-08-24",
+    "amount": 3543.75,
+    "status": "DELIVERED",
+    "created_at": "2026-08-24T13:45:00Z",
+    "updated_at": "2026-08-24T13:45:00Z"
+  },
+  {
+    "_id": "ORD003",
+    "order_id": "ORD003",
+    "customer": {
+      "name": "Kovai Fresh Mart",
+      "city": "Coimbatore"
+    },
+    "date": "2026-08-25",
+    "amount": 4800.0,
+    "status": "PROCESSING",
+    "created_at": "2026-08-25T09:15:00Z",
+    "updated_at": "2026-08-25T09:15:00Z"
+  }
+]
