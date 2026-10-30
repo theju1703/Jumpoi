@@ -57,15 +57,18 @@ class SalesInvoiceCreate(BaseModel):
     rate: float
     gst_percent: float = 5.0
 
-class PurchaseInvoiceCreate(BaseModel):
-    invoice_no: str
-    invoice_date: str
-    vendor: str
+class PurchaseItem(BaseModel):
     item_code: str
     item_name: str
     quantity: float
     rate: float
     gst_percent: float = 5.0
+
+class PurchaseInvoiceCreate(BaseModel):
+    invoice_no: str
+    invoice_date: str
+    vendor: str
+    items: List[PurchaseItem]
 
 # In-memory / MongoDB Repository Helper
 def get_collection_data(collection_name: str) -> List[Dict[str, Any]]:
@@ -188,44 +191,54 @@ def list_purchases():
 @app.post("/api/purchases/invoice", tags=["Purchases"])
 def create_purchase_invoice(pur: PurchaseInvoiceCreate):
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    net = round(pur.quantity * pur.rate, 2)
-    gst = round(net * (pur.gst_percent / 100.0), 2)
-    total = round(net + gst, 2)
-
+    # Compute per‑item totals and aggregate
+    purchase_items = []
+    total_net = 0.0
+    total_gst = 0.0
+    stock_entries = []
+    for idx, it in enumerate(pur.items):
+        net = round(it.quantity * it.rate, 2)
+        gst = round(net * (it.gst_percent / 100.0), 2)
+        total_net += net
+        total_gst += gst
+        purchase_items.append({
+            "item_code": it.item_code,
+            "item_name": it.item_name,
+            "quantity": it.quantity,
+            "rate": it.rate,
+            "gst_percent": it.gst_percent,
+            "net_amount": net,
+            "gst_amount": gst,
+            "total_amount": round(net + gst, 2)
+        })
+        stock_entries.append({
+            "_id": f"STK-IN-{pur.invoice_no}-{idx}",
+            "item_code": it.item_code,
+            "item_name": it.item_name,
+            "transaction_type": "IN",
+            "quantity": it.quantity,
+            "voucher_no": pur.invoice_no,
+            "date": pur.invoice_date,
+            "created_at": now,
+            "updated_at": now
+        })
+    total_amount = round(total_net + total_gst, 2)
     purchase_doc = {
         "_id": pur.invoice_no,
         "invoice_no": pur.invoice_no,
         "invoice_date": pur.invoice_date,
         "vendor": pur.vendor,
-        "item_code": pur.item_code,
-        "item_name": pur.item_name,
-        "quantity": pur.quantity,
-        "rate": pur.rate,
-        "net_amount": net,
-        "gst_percent": pur.gst_percent,
-        "gst_amount": gst,
-        "total_amount": total,
+        "items": purchase_items,
+        "net_amount": round(total_net, 2),
+        "gst_amount": round(total_gst, 2),
+        "total_amount": total_amount,
         "created_at": now,
         "updated_at": now
     }
-
-    # Auto-generate Stock Ledger IN movement
-    stock_doc = {
-        "_id": f"STK-IN-{pur.invoice_no}",
-        "item_code": pur.item_code,
-        "item_name": pur.item_name,
-        "transaction_type": "IN",
-        "quantity": pur.quantity,
-        "voucher_no": pur.invoice_no,
-        "date": pur.invoice_date,
-        "created_at": now,
-        "updated_at": now
-    }
-
     return {
         "message": "Purchase bill registered and stock IN logged",
         "purchase": purchase_doc,
-        "stock_ledger_entry": stock_doc
+        "stock_ledger_entries": stock_entries
     }
 
 # 5. Inventory & Stock Position
