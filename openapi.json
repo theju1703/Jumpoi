@@ -1,0 +1,614 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Jompoi Online Grocery Operational Backend & Analytics API",
+    "description": "Operational Backend API for Jompoi Grocery, BigQuery ETL Sync, GST ITC Engine, and ERPNext Analytics",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/api/health": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Health Check",
+        "operationId": "health_check_api_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items": {
+      "get": {
+        "tags": [
+          "Catalog"
+        ],
+        "summary": "List Items",
+        "operationId": "list_items_api_items_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Catalog"
+        ],
+        "summary": "Create Item",
+        "operationId": "create_item_api_items_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/customers": {
+      "get": {
+        "tags": [
+          "Customers"
+        ],
+        "summary": "List Customers",
+        "operationId": "list_customers_api_customers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Customers"
+        ],
+        "summary": "Create Customer",
+        "operationId": "create_customer_api_customers_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CustomerCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sales": {
+      "get": {
+        "tags": [
+          "Sales"
+        ],
+        "summary": "List Sales",
+        "operationId": "list_sales_api_sales_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sales/invoice": {
+      "post": {
+        "tags": [
+          "Sales"
+        ],
+        "summary": "Create Sales Invoice",
+        "operationId": "create_sales_invoice_api_sales_invoice_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SalesInvoiceCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/purchases": {
+      "get": {
+        "tags": [
+          "Purchases"
+        ],
+        "summary": "List Purchases",
+        "operationId": "list_purchases_api_purchases_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/purchases/invoice": {
+      "post": {
+        "tags": [
+          "Purchases"
+        ],
+        "summary": "Create Purchase Invoice",
+        "operationId": "create_purchase_invoice_api_purchases_invoice_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PurchaseInvoiceCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stock": {
+      "get": {
+        "tags": [
+          "Inventory"
+        ],
+        "summary": "Get Stock Position",
+        "operationId": "get_stock_position_api_stock_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/gst/report": {
+      "get": {
+        "tags": [
+          "GST & Tax"
+        ],
+        "summary": "Get Gst Report",
+        "operationId": "get_gst_report_api_gst_report_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/pnl": {
+      "get": {
+        "tags": [
+          "ERPNext"
+        ],
+        "summary": "Get Pnl Statement",
+        "operationId": "get_pnl_statement_api_pnl_get",
+        "parameters": [
+          {
+            "name": "operating_expenses",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "default": 850.0,
+              "title": "Operating Expenses"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/etl/sync": {
+      "post": {
+        "tags": [
+          "ETL Pipeline"
+        ],
+        "summary": "Trigger Etl Sync",
+        "operationId": "trigger_etl_sync_api_etl_sync_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "tags": [
+          "Dashboard UI"
+        ],
+        "summary": "Serve Dashboard",
+        "operationId": "serve_dashboard__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "CustomerCreate": {
+        "properties": {
+          "customer_id": {
+            "type": "string",
+            "title": "Customer Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "city": {
+            "type": "string",
+            "title": "City"
+          },
+          "phone": {
+            "type": "string",
+            "title": "Phone"
+          }
+        },
+        "type": "object",
+        "required": [
+          "customer_id",
+          "name",
+          "city",
+          "phone"
+        ],
+        "title": "CustomerCreate"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "ItemCreate": {
+        "properties": {
+          "item_code": {
+            "type": "string",
+            "title": "Item Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "brand": {
+            "type": "string",
+            "title": "Brand"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "price": {
+            "type": "number",
+            "title": "Price"
+          },
+          "gst_percent": {
+            "type": "number",
+            "title": "Gst Percent",
+            "default": 5.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_code",
+          "name",
+          "brand",
+          "category",
+          "price"
+        ],
+        "title": "ItemCreate"
+      },
+      "PurchaseInvoiceCreate": {
+        "properties": {
+          "invoice_no": {
+            "type": "string",
+            "title": "Invoice No"
+          },
+          "invoice_date": {
+            "type": "string",
+            "title": "Invoice Date"
+          },
+          "vendor": {
+            "type": "string",
+            "title": "Vendor"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PurchaseItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "invoice_no",
+          "invoice_date",
+          "vendor",
+          "items"
+        ],
+        "title": "PurchaseInvoiceCreate"
+      },
+      "PurchaseItem": {
+        "properties": {
+          "item_code": {
+            "type": "string",
+            "title": "Item Code"
+          },
+          "item_name": {
+            "type": "string",
+            "title": "Item Name"
+          },
+          "quantity": {
+            "type": "number",
+            "title": "Quantity"
+          },
+          "rate": {
+            "type": "number",
+            "title": "Rate"
+          },
+          "gst_percent": {
+            "type": "number",
+            "title": "Gst Percent",
+            "default": 5.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_code",
+          "item_name",
+          "quantity",
+          "rate"
+        ],
+        "title": "PurchaseItem"
+      },
+      "SalesInvoiceCreate": {
+        "properties": {
+          "invoice_no": {
+            "type": "string",
+            "title": "Invoice No"
+          },
+          "invoice_date": {
+            "type": "string",
+            "title": "Invoice Date"
+          },
+          "customer_name": {
+            "type": "string",
+            "title": "Customer Name"
+          },
+          "customer_city": {
+            "type": "string",
+            "title": "Customer City"
+          },
+          "item_code": {
+            "type": "string",
+            "title": "Item Code"
+          },
+          "item_name": {
+            "type": "string",
+            "title": "Item Name"
+          },
+          "quantity": {
+            "type": "number",
+            "title": "Quantity"
+          },
+          "rate": {
+            "type": "number",
+            "title": "Rate"
+          },
+          "gst_percent": {
+            "type": "number",
+            "title": "Gst Percent",
+            "default": 5.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "invoice_no",
+          "invoice_date",
+          "customer_name",
+          "customer_city",
+          "item_code",
+          "item_name",
+          "quantity",
+          "rate"
+        ],
+        "title": "SalesInvoiceCreate"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    }
+  }
+}

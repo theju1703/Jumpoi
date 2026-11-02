@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Jompoi ERP - REST API Interactive Documentation</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css" />
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background: #fafafa;
+    }
+    .top-banner {
+      background: #0f172a;
+      color: #fff;
+      padding: 12px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+    .top-banner a {
+      color: #38bdf8;
+      text-decoration: none;
+      font-weight: 500;
+    }
+    .top-banner a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="top-banner">
+    <div><strong>Jompoi ERP Business System</strong> &mdash; REST API Specification</div>
+    <div><a href="index.html">&larr; Back to ERP Dashboard</a></div>
+  </div>
+  <div id="swagger-ui"></div>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+  <script>
+    window.onload = () => {
+      window.ui = SwaggerUIBundle({
+        url: 'openapi.json',
+        dom_id: '#swagger-ui',
+        deepLinking: true,
+        presets: [
+          SwaggerUIBundle.presets.apis,
+          SwaggerUIStandalonePreset
+        ],
+        layout: "StandaloneLayout"
+      });
+    };
+  </script>
+</body>
+</html>
