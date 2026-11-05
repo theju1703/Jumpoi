@@ -81,9 +81,15 @@
           <div>
             <label style="font-size:0.8rem; color:var(--text-secondary); text-transform:uppercase; font-weight:600; margin-right:0.5rem;">Select Invoice:</label>
             <select id="invoice-selector" style="padding:0.5rem 0.75rem; border-radius:6px; background:#1e293b; color:#fff; border:1px solid #334155;">
-              <option value="INV-2026-001">INV-2026-001 (ABC Stores)</option>
-              <option value="INV-2026-002">INV-2026-002 (Sri Murugan Supermarket)</option>
-              <option value="INV-2026-003">INV-2026-003 (Kovai Fresh Mart)</option>
+              <optgroup label="Sales Invoices (Customer Billing)">
+                <option value="INV-2026-001">INV-2026-001 (ABC Stores)</option>
+                <option value="INV-2026-002">INV-2026-002 (Sri Murugan Supermarket)</option>
+                <option value="INV-2026-003">INV-2026-003 (Kovai Fresh Mart)</option>
+              </optgroup>
+              <optgroup label="Purchase Invoices (Vendor Bills)">
+                <option value="PUR-2026-001">PUR-2026-001 (KR Agro Supplies)</option>
+                <option value="PUR-2026-002">PUR-2026-002 (Adani Wilmar Dist)</option>
+              </optgroup>
             </select>
           </div>
           <div>
@@ -419,6 +425,7 @@
                 <th>Input GST Rate</th>
                 <th>Input Tax Credit</th>
                 <th>Gross Total</th>
+                <th>Print Action</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -428,9 +435,62 @@
 
       <!-- TAB 6: MASTER ITEMS -->
       <section id="tab-items" class="tab-pane">
+        <!-- Stock Data Analysis KPI Cards -->
+        <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 1.5rem;">
+          <div class="kpi-card">
+            <div class="kpi-icon blue"><i class="fa-solid fa-boxes-stacked"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Total SKUs</span>
+              <h3 id="stat-total-items">4 Items</h3>
+              <span class="kpi-sub neutral">Master Catalog</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon emerald"><i class="fa-solid fa-warehouse"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Total Stock on Hand</span>
+              <h3 id="stat-total-stock">140 Units</h3>
+              <span class="kpi-sub positive">&sum; IN - &sum; OUT Real-Time</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon purple"><i class="fa-solid fa-circle-check"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">In-Stock SKUs</span>
+              <h3 id="stat-in-stock">4 SKUs</h3>
+              <span class="kpi-sub positive">Available for Billing</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon amber"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Low Stock Alerts</span>
+              <h3 id="stat-low-stock">1 SKU</h3>
+              <span class="kpi-sub warning">Safety Stock Threshold</span>
+            </div>
+          </div>
+        </div>
+
         <div class="table-container">
-          <div class="table-header">
-            <h3><i class="fa-solid fa-box-open"></i> Master Items Catalog & Tax Rates</h3>
+          <div class="table-header" style="flex-wrap: wrap; gap: 1rem;">
+            <div>
+              <h3><i class="fa-solid fa-box-open"></i> Master Items Stock & Catalog Analysis</h3>
+              <p style="font-size: 0.8rem; color: var(--text-secondary); margin: 0.2rem 0 0 0;">
+                Live inventory tracking: Stock increases upon vendor purchase, decreases upon POS customer sale.
+              </p>
+            </div>
+            <!-- Live Search & Filter Bar -->
+            <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
+              <div style="position: relative;">
+                <input type="text" id="item-search-filter" placeholder="🔍 Search item name, code (ITM001)..." 
+                       style="padding: 0.5rem 0.75rem; border-radius: 6px; background: #0f172a; color: #fff; border: 1px solid #334155; font-size: 0.85rem; width: 280px;" />
+              </div>
+              <select id="item-stock-filter" style="padding: 0.5rem 0.75rem; border-radius: 6px; background: #0f172a; color: #fff; border: 1px solid #334155; font-size: 0.85rem;">
+                <option value="ALL">All Items</option>
+                <option value="IN_STOCK">In Stock Only (&gt; 0)</option>
+                <option value="LOW_STOCK">Low Stock Alert (&le; 20)</option>
+              </select>
+            </div>
           </div>
           <table class="data-table" id="table-items-master">
             <thead>
@@ -441,7 +501,8 @@
                 <th>Category</th>
                 <th>Price (INR)</th>
                 <th>GST Rate</th>
-                <th>Status</th>
+                <th>Stock on Hand</th>
+                <th>Stock Status</th>
               </tr>
             </thead>
             <tbody></tbody>

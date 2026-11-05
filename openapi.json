@@ -122,7 +122,7 @@
           "2. Product Catalog"
         ],
         "summary": "List Items",
-        "description": "List all products in catalog with optional category and search filters.",
+        "description": "List all products in catalog with real-time stock quantities on hand.\nSupports filtering by category, search by item name/code/brand, and stock status.",
         "operationId": "list_items_api_items_get",
         "parameters": [
           {
@@ -156,6 +156,23 @@
               ],
               "title": "Search"
             }
+          },
+          {
+            "name": "in_stock_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": false,
+              "title": "In Stock Only"
+            }
           }
         ],
         "responses": {
@@ -184,7 +201,7 @@
           "2. Product Catalog"
         ],
         "summary": "Create Item",
-        "description": "Add a new item to master catalogue (Admin/Store Manager).",
+        "description": "Add a new item to master catalogue (Admin/Store Manager).\nIf opening_stock is provided (> 0), automatically logs initial stock IN movement.",
         "operationId": "create_item_api_items_post",
         "security": [
           {
@@ -229,7 +246,7 @@
           "2. Product Catalog"
         ],
         "summary": "Get Item",
-        "description": "Retrieve item details by item_code.",
+        "description": "Retrieve item details by item_code along with current quantity on hand.",
         "operationId": "get_item_api_items__item_code__get",
         "parameters": [
           {
@@ -368,7 +385,7 @@
           "2. Product Catalog"
         ],
         "summary": "Get Item By Barcode",
-        "description": "Barcode lookup for POS scanning terminals.",
+        "description": "Barcode lookup for POS scanning terminals with current stock availability.",
         "operationId": "get_item_by_barcode_api_items_barcode__barcode__get",
         "parameters": [
           {
@@ -1108,6 +1125,93 @@
         }
       }
     },
+    "/api/purchases/print": {
+      "post": {
+        "tags": [
+          "4. Supplier & Purchases",
+          "7. Commercial Print Invoice"
+        ],
+        "summary": "Print Purchase Invoice Custom",
+        "description": "Renders commercial printable purchase bill from given JSON payload.\nTable columns:\n# | Item name | Item description(Optional) | quantity | price | tax | (total=(price+tax)*quantity)",
+        "operationId": "print_purchase_invoice_custom_api_purchases_print_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrintPurchaseInvoiceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/purchases/{invoice_no}/print": {
+      "get": {
+        "tags": [
+          "4. Supplier & Purchases",
+          "7. Commercial Print Invoice"
+        ],
+        "summary": "Print Existing Purchase Invoice",
+        "description": "Look up an existing purchase invoice by invoice number and render printable purchase bill.\nTable columns:\n# | Item name | Item description(Optional) | quantity | price | tax | (total=(price+tax)*quantity)",
+        "operationId": "print_existing_purchase_invoice_api_purchases__invoice_no__print_get",
+        "parameters": [
+          {
+            "name": "invoice_no",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Invoice No"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/gst/reconciliation": {
       "get": {
         "tags": [
@@ -1419,6 +1523,19 @@
             "minimum": 0.0,
             "title": "Min Stock Alert",
             "default": 10.0
+          },
+          "opening_stock": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opening Stock",
+            "default": 0.0
           }
         },
         "type": "object",
@@ -1605,6 +1722,101 @@
           "items"
         ],
         "title": "PrintInvoiceRequest"
+      },
+      "PrintPurchaseInvoiceItem": {
+        "properties": {
+          "item_name": {
+            "type": "string",
+            "title": "Item Name"
+          },
+          "item_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Description"
+          },
+          "quantity": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity"
+          },
+          "price": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Price"
+          },
+          "tax_percent": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Tax Percent",
+            "default": 5.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_name",
+          "quantity",
+          "price"
+        ],
+        "title": "PrintPurchaseInvoiceItem"
+      },
+      "PrintPurchaseInvoiceRequest": {
+        "properties": {
+          "invoice_no": {
+            "type": "string",
+            "title": "Invoice No"
+          },
+          "invoice_date": {
+            "type": "string",
+            "title": "Invoice Date"
+          },
+          "vendor_name": {
+            "type": "string",
+            "title": "Vendor Name"
+          },
+          "vendor_gstin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendor Gstin"
+          },
+          "vendor_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendor Address"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PrintPurchaseInvoiceItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "invoice_no",
+          "invoice_date",
+          "vendor_name",
+          "items"
+        ],
+        "title": "PrintPurchaseInvoiceRequest"
       },
       "PurchaseInvoiceCreate": {
         "properties": {

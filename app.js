@@ -8,8 +8,14 @@ document.addEventListener("DOMContentLoaded", () => {
       "CUST003": { id: "CUST003", name: "Kovai Fresh Mart", city: "Coimbatore, Tamil Nadu", phone: "+91 9876543212" }
     },
 
+    vendors: {
+      "VEND001": { id: "VEND001", name: "KR Agro Supplies", gstin: "33AABCK1234A1Z5", city: "Kanchipuram, Tamil Nadu", phone: "+91 9444112233" },
+      "VEND002": { id: "VEND002", name: "Adani Wilmar Dist", gstin: "33AABCA5678B1Z2", city: "Chennai, Tamil Nadu", phone: "+91 9444556677" }
+    },
+
     invoices: {
       "INV-2026-001": {
+        type: "SALES",
         invoice_no: "INV-2026-001",
         invoice_date: "2026-08-24",
         customer_id: "CUST001",
@@ -20,6 +26,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ]
       },
       "INV-2026-002": {
+        type: "SALES",
         invoice_no: "INV-2026-002",
         invoice_date: "2026-08-24",
         customer_id: "CUST002",
@@ -29,6 +36,7 @@ document.addEventListener("DOMContentLoaded", () => {
         ]
       },
       "INV-2026-003": {
+        type: "SALES",
         invoice_no: "INV-2026-003",
         invoice_date: "2026-08-25",
         customer_id: "CUST003",
@@ -36,14 +44,32 @@ document.addEventListener("DOMContentLoaded", () => {
           { name: "Toor Dal 1kg", desc: "Unpolished Organic Dal", qty: 30, price: 160.0, tax_percent: 0.0 },
           { name: "Sunflower Oil 1L", desc: "Fortune Edible Oil 1L Pouch", qty: 10, price: 135.0, tax_percent: 5.0 }
         ]
+      },
+      "PUR-2026-001": {
+        type: "PURCHASE",
+        invoice_no: "PUR-2026-001",
+        invoice_date: "2026-08-20",
+        vendor_id: "VEND001",
+        items: [
+          { name: "Basmati Rice 5kg", desc: "Raw Paddy Procurement 50 Bags", qty: 50, price: 380.0, tax_percent: 5.0 }
+        ]
+      },
+      "PUR-2026-002": {
+        type: "PURCHASE",
+        invoice_no: "PUR-2026-002",
+        invoice_date: "2026-08-21",
+        vendor_id: "VEND002",
+        items: [
+          { name: "Sunflower Oil 1L", desc: "Refined Edible Oil Batch 100 Cartons", qty: 100, price: 110.0, tax_percent: 5.0 }
+        ]
       }
     },
 
     items: [
-      { item_code: "ITM001", name: "Basmati Rice 5kg", brand: "India Gate", category: "Grains & Rice", price: 450.0, gst_percent: 5.0 },
-      { item_code: "ITM002", name: "Sunflower Oil 1L", brand: "Fortune", category: "Edible Oils", price: 135.0, gst_percent: 5.0 },
-      { item_code: "ITM003", name: "Toor Dal 1kg", brand: "Tata Sampann", category: "Pulses", price: 160.0, gst_percent: 0.0 },
-      { item_code: "ITM004", name: "Milk 500ml", brand: "Aavin", category: "Dairy", price: 25.0, gst_percent: 0.0 }
+      { item_code: "ITM001", name: "Basmati Rice 5kg", brand: "India Gate", category: "Grains & Rice", price: 450.0, gst_percent: 5.0, min_stock_alert: 10.0 },
+      { item_code: "ITM002", name: "Sunflower Oil 1L", brand: "Fortune", category: "Edible Oils", price: 135.0, gst_percent: 5.0, min_stock_alert: 20.0 },
+      { item_code: "ITM003", name: "Toor Dal 1kg", brand: "Tata Sampann", category: "Pulses", price: 160.0, gst_percent: 0.0, min_stock_alert: 15.0 },
+      { item_code: "ITM004", name: "Milk 500ml", brand: "Aavin", category: "Dairy", price: 25.0, gst_percent: 0.0, min_stock_alert: 10.0 }
     ],
 
     sales: [
@@ -60,20 +86,39 @@ document.addEventListener("DOMContentLoaded", () => {
     stock_ledger: [
       { date: "2026-08-20", item_code: "ITM001", item_name: "Basmati Rice 5kg", transaction_type: "IN (Purchase)", quantity: 50, voucher_no: "PUR-2026-001" },
       { date: "2026-08-21", item_code: "ITM002", item_name: "Sunflower Oil 1L", transaction_type: "IN (Purchase)", quantity: 100, voucher_no: "PUR-2026-002" },
+      { date: "2026-08-22", item_code: "ITM003", item_name: "Toor Dal 1kg", transaction_type: "IN (Opening Stock)", quantity: 50, voucher_no: "OPENING-ITM003" },
+      { date: "2026-08-22", item_code: "ITM004", item_name: "Milk 500ml", transaction_type: "IN (Opening Stock)", quantity: 40, voucher_no: "OPENING-ITM004" },
       { date: "2026-08-24", item_code: "ITM001", item_name: "Basmati Rice 5kg", transaction_type: "OUT (Sale)", quantity: 10, voucher_no: "INV-2026-001" },
       { date: "2026-08-24", item_code: "ITM002", item_name: "Sunflower Oil 1L", transaction_type: "OUT (Sale)", quantity: 25, voucher_no: "INV-2026-002" },
       { date: "2026-08-25", item_code: "ITM003", item_name: "Toor Dal 1kg", transaction_type: "OUT (Sale)", quantity: 30, voucher_no: "INV-2026-003" }
     ]
   };
 
+  // Helper: Compute real-time stock balances (sum(IN) - sum(OUT))
+  function calculateStockBalances() {
+    const balances = {};
+    erpData.stock_ledger.forEach(entry => {
+      const code = entry.item_code;
+      const qty = parseFloat(entry.quantity) || 0;
+      const type = (entry.transaction_type || "").toUpperCase();
+      if (!balances[code]) balances[code] = 0;
+      if (type.includes("IN")) {
+        balances[code] += qty;
+      } else if (type.includes("OUT")) {
+        balances[code] -= qty;
+      }
+    });
+    return balances;
+  }
+
   // Tab Metadata
   const tabMetadata = {
-    "tab-invoice": { title: "Tax Invoice & Billing", subtitle: "Generate, review, and print official commercial invoices with per-item GST calculations" },
+    "tab-invoice": { title: "Tax Invoice & Commercial Bill Printing", subtitle: "Generate, review, and print official commercial Sales Invoices and Vendor Purchase Bills" },
     "tab-erp-pnl": { title: "ERP Profit & Loss Statement", subtitle: "Operational accounting financial statement generated from sales and procurement costs" },
     "tab-gst-itc": { title: "GST & ITC Tax Reconciliation", subtitle: "Input Tax Credit reconciliation between GSTR-1 output tax and GSTR-2B vendor purchases" },
     "tab-sales": { title: "Customer Sales Invoices", subtitle: "Register of operational customer sales transactions and billing records" },
     "tab-purchases": { title: "Vendor Purchase Invoices", subtitle: "Procurement bills from suppliers with itemized GST tax credit breakdown" },
-    "tab-items": { title: "Master Items Catalog", subtitle: "Item codes, categories, retail prices, and applicable GST percentage rates" },
+    "tab-items": { title: "Master Items Stock & Catalog Analysis", subtitle: "Real-time quantity on hand, search filter by item code or name, and stock status" },
     "tab-inventory": { title: "Inventory Movement Ledger", subtitle: "Real-time audit stream of stock IN (purchases) and stock OUT (sales) movements" }
   };
 
@@ -83,20 +128,26 @@ document.addEventListener("DOMContentLoaded", () => {
   const pageTitle = document.getElementById("page-title");
   const pageSubtitle = document.getElementById("page-subtitle");
 
+  function switchTab(targetTab) {
+    navButtons.forEach(b => b.classList.remove("active"));
+    tabPanes.forEach(p => p.classList.remove("active"));
+
+    const activeBtn = document.querySelector(`.nav-item[data-tab="${targetTab}"]`);
+    if (activeBtn) activeBtn.classList.add("active");
+
+    const targetPane = document.getElementById(targetTab);
+    if (targetPane) targetPane.classList.add("active");
+
+    if (tabMetadata[targetTab]) {
+      pageTitle.textContent = tabMetadata[targetTab].title;
+      pageSubtitle.textContent = tabMetadata[targetTab].subtitle;
+    }
+  }
+
   navButtons.forEach(btn => {
     btn.addEventListener("click", () => {
       const targetTab = btn.getAttribute("data-tab");
-      navButtons.forEach(b => b.classList.remove("active"));
-      tabPanes.forEach(p => p.classList.remove("active"));
-
-      btn.classList.add("active");
-      const targetPane = document.getElementById(targetTab);
-      if (targetPane) targetPane.classList.add("active");
-
-      if (tabMetadata[targetTab]) {
-        pageTitle.textContent = tabMetadata[targetTab].title;
-        pageSubtitle.textContent = tabMetadata[targetTab].subtitle;
-      }
+      switchTab(targetTab);
     });
   });
 
@@ -107,14 +158,68 @@ document.addEventListener("DOMContentLoaded", () => {
     const inv = erpData.invoices[invoiceKey];
     if (!inv) return;
 
-    const customer = erpData.customers[inv.customer_id] || { name: "Customer", city: "Tamil Nadu", phone: "-" };
+    const isPurchase = inv.type === "PURCHASE" || invoiceKey.startsWith("PUR-");
 
-    // Update Header fields
+    // Badge Title & Color
+    const badgeSpan = document.querySelector(".invoice-badge-title");
+    if (badgeSpan) {
+      badgeSpan.textContent = isPurchase ? "PURCHASE INVOICE / BILL" : "TAX INVOICE";
+      badgeSpan.style.background = isPurchase ? "#0284c7" : "#0f172a";
+    }
+
+    // Header fields
     document.getElementById("inv-no").textContent = inv.invoice_no;
     document.getElementById("inv-date").textContent = inv.invoice_date;
-    document.getElementById("inv-customer-name").textContent = customer.name;
-    document.getElementById("inv-customer-city").textContent = `City: ${customer.city}`;
-    document.getElementById("inv-customer-phone").textContent = `Phone: ${customer.phone}`;
+
+    const partyBoxes = document.querySelectorAll(".party-box");
+    if (partyBoxes.length >= 2) {
+      if (isPurchase) {
+        const vendor = erpData.vendors[inv.vendor_id] || { name: "KR Agro Supplies", gstin: "33AABCK1234A1Z5", city: "Tamil Nadu", phone: "+91 9444112233" };
+        partyBoxes[0].innerHTML = `
+          <h4>Vendor / Supplier</h4>
+          <p><strong>${vendor.name}</strong></p>
+          <p>GSTIN: ${vendor.gstin}</p>
+          <p>City: ${vendor.city}</p>
+          <p>Phone: ${vendor.phone}</p>
+        `;
+        partyBoxes[1].innerHTML = `
+          <h4>Billed / Received At (Recipient)</h4>
+          <p><strong>Jompoi Central Supermarket Hub</strong></p>
+          <p>GSTIN: 33AAAAA0000A1Z5</p>
+          <p>Ambattur Industrial Estate, Chennai</p>
+          <p>State Code: 33 (Tamil Nadu)</p>
+        `;
+      } else {
+        const customer = erpData.customers[inv.customer_id] || { name: "Customer", city: "Tamil Nadu", phone: "-" };
+        partyBoxes[0].innerHTML = `
+          <h4>Billed To (Customer)</h4>
+          <p><strong id="inv-customer-name">${customer.name}</strong></p>
+          <p id="inv-customer-city">City: ${customer.city}</p>
+          <p id="inv-customer-phone">Phone: ${customer.phone}</p>
+        `;
+        partyBoxes[1].innerHTML = `
+          <h4>Dispatched From (Warehouse)</h4>
+          <p><strong>Jompoi Central Fulfillment Hub</strong></p>
+          <p>Ambattur Industrial Estate, Chennai</p>
+          <p>State Code: 33 (Tamil Nadu)</p>
+        `;
+      }
+    }
+
+    // Update Table Header to match client's exact required format:
+    // Item name | Item description(Optional) | quantity | price | tax | (total=(price+tax)*quantity)
+    const tableHeader = document.querySelector(".invoice-table thead tr");
+    if (tableHeader) {
+      tableHeader.innerHTML = `
+        <th style="width:5%;">#</th>
+        <th style="width:25%;">Item name</th>
+        <th style="width:22%;">Item description(Optional)</th>
+        <th class="num" style="width:10%;">quantity</th>
+        <th class="num" style="width:12%;">price (₹)</th>
+        <th class="num" style="width:13%;">tax</th>
+        <th class="num" style="width:18%;">total=(price+tax)*quantity</th>
+      `;
+    }
 
     const tbody = document.getElementById("invoice-items-body");
     tbody.innerHTML = "";
@@ -128,9 +233,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const qty = parseFloat(item.qty);
       const taxPercent = parseFloat(item.tax_percent);
 
-      // Formula as specified by client:
+      // Formula strictly enforced:
       // Tax per unit = price * (tax_percent / 100)
-      // Total = (price + tax) * quantity
+      // total = (price + tax) * quantity
       const unitTax = price * (taxPercent / 100.0);
       const lineNet = price * qty;
       const lineTax = unitTax * qty;
@@ -193,6 +298,16 @@ document.addEventListener("DOMContentLoaded", () => {
         return;
       }
 
+      if (!erpData.invoices[currentInvoiceKey]) {
+        erpData.invoices[currentInvoiceKey] = {
+          type: currentInvoiceKey.startsWith("PUR-") ? "PURCHASE" : "SALES",
+          invoice_no: currentInvoiceKey,
+          invoice_date: new Date().toISOString().split("T")[0],
+          customer_id: "CUST001",
+          items: []
+        };
+      }
+
       erpData.invoices[currentInvoiceKey].items.push({
         name: name,
         desc: desc || null,
@@ -211,26 +326,124 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  // Global helper to print purchase bill from Tab 5
+  window.printPurchaseBill = function(invoiceNo) {
+    if (invoiceSelector) {
+      invoiceSelector.value = invoiceNo;
+    }
+    currentInvoiceKey = invoiceNo;
+    switchTab("tab-invoice");
+    renderInvoice(invoiceNo);
+  };
+
   // Initial render of invoice
   renderInvoice(currentInvoiceKey);
 
-  // --- POPULATE OTHER ERP TABLES ---
+  // --- TAB 6: MASTER ITEMS STOCK DATA ANALYSIS & FILTER ENGINE ---
+  function renderMasterItems() {
+    const balances = calculateStockBalances();
+    const searchVal = (document.getElementById("item-search-filter")?.value || "").toLowerCase().trim();
+    const filterVal = document.getElementById("item-stock-filter")?.value || "ALL";
 
-  // 1. Master Items Table
-  const itemsTbody = document.querySelector("#table-items-master tbody");
-  if (itemsTbody) {
-    itemsTbody.innerHTML = erpData.items.map(it => `
-      <tr>
-        <td><code>${it.item_code}</code></td>
-        <td><strong>${it.name}</strong></td>
-        <td>${it.brand}</td>
-        <td>${it.category}</td>
-        <td>₹${it.price.toFixed(2)}</td>
-        <td><span class="badge badge-success">${it.gst_percent}%</span></td>
-        <td><span class="badge badge-success">Active Master</span></td>
-      </tr>
-    `).join("");
+    let totalStockUnits = 0;
+    let inStockCount = 0;
+    let lowStockCount = 0;
+
+    const enrichedItems = erpData.items.map(it => {
+      const stockQty = balances[it.item_code] !== undefined ? balances[it.item_code] : 0;
+      totalStockUnits += stockQty;
+      const minAlert = it.min_stock_alert || 10;
+      const isLow = stockQty <= minAlert && stockQty > 0;
+      const isOut = stockQty <= 0;
+
+      if (stockQty > 0) inStockCount++;
+      if (isLow || isOut) lowStockCount++;
+
+      return {
+        ...it,
+        stock_on_hand: stockQty,
+        is_low: isLow,
+        is_out: isOut,
+        status: isOut ? "OUT_OF_STOCK" : (isLow ? "LOW_STOCK" : "IN_STOCK")
+      };
+    });
+
+    // Update KPI Cards
+    const statTotalItems = document.getElementById("stat-total-items");
+    const statTotalStock = document.getElementById("stat-total-stock");
+    const statInStock = document.getElementById("stat-in-stock");
+    const statLowStock = document.getElementById("stat-low-stock");
+
+    if (statTotalItems) statTotalItems.textContent = `${erpData.items.length} SKUs`;
+    if (statTotalStock) statTotalStock.textContent = `${totalStockUnits} Units`;
+    if (statInStock) statInStock.textContent = `${inStockCount} SKUs`;
+    if (statLowStock) statLowStock.textContent = `${lowStockCount} SKU`;
+
+    // Filter items based on client query and stock dropdown
+    const filtered = enrichedItems.filter(it => {
+      // 1. Text filter (item_code or name or brand or category)
+      const matchesSearch = !searchVal || 
+        it.item_code.toLowerCase().includes(searchVal) ||
+        it.name.toLowerCase().includes(searchVal) ||
+        it.brand.toLowerCase().includes(searchVal) ||
+        it.category.toLowerCase().includes(searchVal);
+
+      // 2. Stock filter
+      let matchesStock = true;
+      if (filterVal === "IN_STOCK") matchesStock = it.stock_on_hand > 0;
+      if (filterVal === "LOW_STOCK") matchesStock = it.is_low || it.is_out;
+
+      return matchesSearch && matchesStock;
+    });
+
+    const itemsTbody = document.querySelector("#table-items-master tbody");
+    if (itemsTbody) {
+      if (filtered.length === 0) {
+        itemsTbody.innerHTML = `
+          <tr>
+            <td colspan="8" style="text-align:center; padding:2rem; color:#94a3b8;">
+              <i class="fa-solid fa-magnifying-glass" style="font-size:1.5rem; margin-bottom:0.5rem; display:block;"></i>
+              No item matched your search filter "<strong>${searchVal}</strong>".
+            </td>
+          </tr>
+        `;
+      } else {
+        itemsTbody.innerHTML = filtered.map(it => {
+          let badgeHtml = "";
+          if (it.is_out) {
+            badgeHtml = `<span class="badge badge-warning" style="background:rgba(239,68,68,0.2); color:#ef4444; border:1px solid #ef4444;">OUT OF STOCK (0 Units)</span>`;
+          } else if (it.is_low) {
+            badgeHtml = `<span class="badge badge-warning" style="background:rgba(245,158,11,0.2); color:#f59e0b; border:1px solid #f59e0b;">LOW STOCK (${it.stock_on_hand} Units)</span>`;
+          } else {
+            badgeHtml = `<span class="badge badge-success" style="background:rgba(16,185,129,0.2); color:#10b981; border:1px solid #10b981;">IN STOCK (${it.stock_on_hand} Units)</span>`;
+          }
+
+          return `
+            <tr>
+              <td><code>${it.item_code}</code></td>
+              <td><strong>${it.name}</strong></td>
+              <td>${it.brand}</td>
+              <td>${it.category}</td>
+              <td>₹${it.price.toFixed(2)}</td>
+              <td><span class="badge badge-success">${it.gst_percent}%</span></td>
+              <td><strong style="font-size:1.05rem; color:#f8fafc;">${it.stock_on_hand} Units</strong></td>
+              <td>${badgeHtml}</td>
+            </tr>
+          `;
+        }).join("");
+      }
+    }
   }
+
+  // Attach search and filter event listeners
+  const searchInput = document.getElementById("item-search-filter");
+  const filterSelect = document.getElementById("item-stock-filter");
+  if (searchInput) searchInput.addEventListener("input", renderMasterItems);
+  if (filterSelect) filterSelect.addEventListener("change", renderMasterItems);
+
+  renderMasterItems();
+
+  // --- POPULATE OTHER ERP TABLES ---
 
   // 2. Sales Table
   const salesTbody = document.querySelector("#table-sales tbody");
@@ -251,7 +464,7 @@ document.addEventListener("DOMContentLoaded", () => {
     `).join("");
   }
 
-  // 3. Purchase Table (with per-item GST and ITC)
+  // 3. Purchase Table (with per-item GST, ITC, and Print Bill Action Button)
   const purchasesTbody = document.querySelector("#table-purchases tbody");
   if (purchasesTbody) {
     purchasesTbody.innerHTML = erpData.purchases.map(p => `
@@ -267,6 +480,11 @@ document.addEventListener("DOMContentLoaded", () => {
         <td><span class="badge badge-warning">${p.gst_percent}%</span></td>
         <td><strong style="color:var(--accent-emerald);">₹${p.gst_amount.toFixed(2)}</strong></td>
         <td><strong>₹${p.total_amount.toFixed(2)}</strong></td>
+        <td>
+          <button class="btn btn-secondary" style="padding:0.3rem 0.6rem; font-size:0.75rem;" onclick="printPurchaseBill('${p.invoice_no}')">
+            <i class="fa-solid fa-print"></i> Print Bill
+          </button>
+        </td>
       </tr>
     `).join("");
   }
