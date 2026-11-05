@@ -5,8 +5,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from src.config import MONGO_URI, MONGO_DB_NAME, DUMMY_DATA_DIR, BASE_DIR
@@ -60,6 +59,7 @@ class SalesInvoiceCreate(BaseModel):
 class PurchaseItem(BaseModel):
     item_code: str
     item_name: str
+    item_description: Optional[str] = None
     quantity: float
     rate: float
     gst_percent: float = 5.0
@@ -69,6 +69,20 @@ class PurchaseInvoiceCreate(BaseModel):
     invoice_date: str
     vendor: str
     items: List[PurchaseItem]
+
+class PrintInvoiceItem(BaseModel):
+    item_name: str
+    item_description: Optional[str] = None
+    quantity: float
+    price: float
+    tax_percent: float = 5.0
+
+class PrintInvoiceRequest(BaseModel):
+    invoice_no: str
+    invoice_date: str
+    customer_name: str
+    customer_address: Optional[str] = None
+    items: List[PrintInvoiceItem]
 
 # In-memory / MongoDB Repository Helper
 def get_collection_data(collection_name: str) -> List[Dict[str, Any]]:
@@ -280,19 +294,106 @@ def trigger_etl_sync():
         "target_dataset": "jompoi_reporting"
     }
 
-# Mount static web UI at root /
-WEB_DIR = BASE_DIR / "web"
-if WEB_DIR.exists():
-    app.mount("/static", StaticFiles(directory=str(WEB_DIR)), name="static")
+# 9. Print Invoice – returns a printable HTML invoice
+@app.post("/api/invoice/print", tags=["Invoice"], response_class=HTMLResponse)
+def print_invoice(req: PrintInvoiceRequest):
+    rows = ""
+    grand_total = 0.0
+    for it in req.items:
+        tax_amount = round(it.price * (it.tax_percent / 100.0), 2)
+        line_total = round((it.price + tax_amount) * it.quantity, 2)
+        grand_total += line_total
+        desc_cell = f"<br><small style='color:#666'>{it.item_description}</small>" if it.item_description else ""
+        rows += f"""
+        <tr>
+          <td>{it.item_name}{desc_cell}</td>
+          <td style="text-align:right">{it.quantity}</td>
+          <td style="text-align:right">Rs {it.price:,.2f}</td>
+          <td style="text-align:right">{it.tax_percent}% (Rs {tax_amount:,.2f})</td>
+          <td style="text-align:right"><strong>Rs {line_total:,.2f}</strong></td>
+        </tr>"""
 
-    @app.get("/", tags=["Dashboard UI"])
-    def serve_dashboard():
-        return FileResponse(str(WEB_DIR / "index.html"))
+    grand_total = round(grand_total, 2)
+    addr_line = f"<p>{req.customer_address}</p>" if req.customer_address else ""
 
-    @app.get("/styles.css", include_in_schema=False)
-    def serve_css():
-        return FileResponse(str(WEB_DIR / "styles.css"))
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Invoice {req.invoice_no}</title>
+<style>
+  @media print {{ @page {{ margin: 15mm; }} body {{ margin: 0; }} }}
+  body {{ font-family: 'Segoe UI', Arial, sans-serif; max-width: 800px; margin: 20px auto; color: #1e293b; }}
+  .header {{ display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #0f172a; padding-bottom: 16px; margin-bottom: 20px; }}
+  .company {{ font-size: 24px; font-weight: 700; color: #0f172a; }}
+  .company small {{ display: block; font-size: 12px; font-weight: 400; color: #64748b; }}
+  .invoice-meta {{ text-align: right; }}
+  .invoice-meta h2 {{ margin: 0; color: #0f172a; }}
+  .invoice-meta p {{ margin: 2px 0; color: #475569; font-size: 14px; }}
+  .bill-to {{ margin-bottom: 20px; }}
+  .bill-to h4 {{ margin: 0 0 4px 0; color: #64748b; font-size: 12px; text-transform: uppercase; }}
+  .bill-to p {{ margin: 0; font-size: 15px; }}
+  table {{ width: 100%; border-collapse: collapse; margin-bottom: 20px; }}
+  th {{ background: #0f172a; color: #fff; padding: 10px 12px; text-align: left; font-size: 13px; }}
+  th:not(:first-child) {{ text-align: right; }}
+  td {{ padding: 10px 12px; border-bottom: 1px solid #e2e8f0; font-size: 14px; }}
+  .total-row {{ background: #f1f5f9; }}
+  .total-row td {{ font-size: 16px; font-weight: 700; border-top: 2px solid #0f172a; }}
+  .footer {{ text-align: center; margin-top: 40px; color: #94a3b8; font-size: 12px; }}
+  .print-btn {{ display: block; margin: 20px auto; padding: 10px 30px; background: #0f172a; color: #fff; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; }}
+  @media print {{ .print-btn {{ display: none; }} }}
+</style>
+</head>
+<body>
+  <div class="header">
+    <div>
+      <div class="company">JOMPOI<small>Online Grocery ERP</small></div>
+    </div>
+    <div class="invoice-meta">
+      <h2>INVOICE</h2>
+      <p><strong>{req.invoice_no}</strong></p>
+      <p>Date: {req.invoice_date}</p>
+    </div>
+  </div>
 
-    @app.get("/app.js", include_in_schema=False)
-    def serve_js():
-        return FileResponse(str(WEB_DIR / "app.js"))
+  <div class="bill-to">
+    <h4>Bill To</h4>
+    <p><strong>{req.customer_name}</strong></p>
+    {addr_line}
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th>Item Name</th>
+        <th>Qty</th>
+        <th>Price</th>
+        <th>Tax</th>
+        <th>Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {rows}
+      <tr class="total-row">
+        <td colspan="4" style="text-align:right">Grand Total</td>
+        <td style="text-align:right">Rs {grand_total:,.2f}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="footer">
+    <p>Thank you for your business!</p>
+    <p>Jompoi Online Grocery &bull; Generated on {datetime.datetime.now().strftime("%d-%b-%Y %H:%M")}</p>
+  </div>
+
+  <button class="print-btn" onclick="window.print()">🖨 Print Invoice</button>
+</body>
+</html>"""
+    return HTMLResponse(content=html)
+
+
+# Root redirect to API docs (no dashboard)
+@app.get("/", include_in_schema=False)
+def root_redirect():
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/docs")

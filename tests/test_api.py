@@ -89,3 +89,42 @@ def test_create_purchase_invoice_multi_item():
     assert len(data["stock_ledger_entries"]) == 2
     assert data["stock_ledger_entries"][0]["transaction_type"] == "IN"
 
+def test_print_invoice():
+    payload = {
+        "invoice_no": "INV-PRINT-001",
+        "invoice_date": "2026-11-05",
+        "customer_name": "ABC Stores",
+        "customer_address": "123, Anna Nagar, Chennai",
+        "items": [
+            {
+                "item_name": "Basmati Rice 5kg",
+                "item_description": "India Gate Premium Long Grain",
+                "quantity": 10,
+                "price": 450.0,
+                "tax_percent": 5.0
+            },
+            {
+                "item_name": "Sunflower Oil 1L",
+                "quantity": 5,
+                "price": 135.0,
+                "tax_percent": 12.0
+            }
+        ]
+    }
+    response = client.post("/api/invoice/print", json=payload)
+    assert response.status_code == 200
+    assert "text/html" in response.headers["content-type"]
+    html = response.text
+    assert "INV-PRINT-001" in html
+    assert "Basmati Rice 5kg" in html
+    assert "India Gate Premium Long Grain" in html
+    assert "Sunflower Oil 1L" in html
+    assert "ABC Stores" in html
+    assert "Print Invoice" in html
+    # Item 1: tax = 450 * 5% = 22.50, total = (450 + 22.50) * 10 = 4725.00
+    assert "4,725.00" in html
+    # Item 2: tax = 135 * 12% = 16.20, total = (135 + 16.20) * 5 = 756.00
+    assert "756.00" in html
+    # Grand total = 4725 + 756 = 5481
+    assert "5,481.00" in html
+
