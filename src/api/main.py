@@ -46,10 +46,10 @@ class ItemCreate(BaseModel):
     description: Optional[str] = None
     brand: str
     category: str
-    price: float
-    cost_price: Optional[float] = None
-    gst_percent: float = 5.0
-    min_stock_alert: float = 10.0
+    price: float = Field(..., ge=0)
+    cost_price: Optional[float] = Field(default=None, ge=0)
+    gst_percent: float = Field(default=5.0, ge=0)
+    min_stock_alert: float = Field(default=10.0, ge=0)
 
 class ItemUpdate(BaseModel):
     name: Optional[str] = None
@@ -117,8 +117,19 @@ class PurchaseInvoiceCreate(BaseModel):
 class StockAdjustment(BaseModel):
     item_code: str
     adjustment_type: str  # 'ADD' or 'DEDUCT'
-    quantity: float
+    quantity: float = Field(..., gt=0)
     reason: str  # 'DAMAGE', 'EXPIRY', 'AUDIT_CORRECTION', 'STOCK_IN'
+    notes: Optional[str] = None
+
+class ReturnItem(BaseModel):
+    item_code: str
+    quantity: float = Field(..., gt=0)
+    reason: Optional[str] = "Customer return"
+    condition: str = "RESELLABLE"
+
+class SalesReturnRequest(BaseModel):
+    return_no: Optional[str] = None
+    return_items: List[ReturnItem]
     notes: Optional[str] = None
 
 class PrintInvoiceItem(BaseModel):
@@ -280,6 +291,9 @@ def get_item_by_barcode(barcode: str):
 @app.post("/api/items", tags=["2. Product Catalog"])
 def create_item(item: ItemCreate, user: Dict[str, Any] = Depends(require_roles(UserRole.ADMIN, UserRole.STORE_MANAGER))):
     """Add a new item to master catalogue (Admin/Store Manager)."""
+    existing_items = get_collection_data("items")
+    if any(it.get("item_code") == item.item_code for it in existing_items):
+        raise HTTPException(status_code=400, detail=f"Item code '{item.item_code}' already exists in catalogue")
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     new_doc = item.model_dump()
     new_doc["_id"] = item.item_code
@@ -306,6 +320,28 @@ def update_item(item_code: str, update: ItemUpdate, user: Dict[str, Any] = Depen
     save_collection_doc("items", target)
     return {"message": "Item updated successfully", "item": target}
 
+@app.delete("/api/items/{item_code}", tags=["2. Product Catalog"])
+def delete_item(item_code: str, user: Dict[str, Any] = Depends(require_roles(UserRole.ADMIN))):
+    """Delete an item from master catalogue (Admin only)."""
+    items = get_collection_data("items")
+    idx = None
+    for i, it in enumerate(items):
+        if it.get("item_code") == item_code or it.get("_id") == item_code:
+            idx = i
+            break
+    if idx is None:
+        raise HTTPException(status_code=404, detail=f"Item '{item_code}' not found")
+    removed = items.pop(idx)
+    try:
+        from src.config.settings import MONGO_URI, MONGO_DB_NAME
+        from pymongo import MongoClient
+        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=1000)
+        db = client[MONGO_DB_NAME]
+        db["items"].delete_one({"_id": item_code})
+    except Exception:
+        pass
+    return {"message": f"Item '{item_code}' deleted successfully", "deleted_item": removed}
+
 # ---------------------------------------------------------------------------
 # MODULE 3: INVENTORY & STOCK MANAGEMENT
 # ---------------------------------------------------------------------------
@@ -313,11 +349,39 @@ def update_item(item_code: str, update: ItemUpdate, user: Dict[str, Any] = Depen
 @app.get("/api/stock", tags=["3. Inventory Management"])
 def get_stock_position():
     """Retrieve real-time stock position (quantity on hand & valuation) aggregated across all ledger movements."""
-    warehouse = LocalWarehouseEmulator()
-    warehouse.load_from_json_files(DUMMY_DATA_DIR)
-    pos = warehouse.query_view("vw_stock_position")
-    warehouse.close()
-    return pos
+    items = get_collection_data("items")
+    ledger = get_collection_data("stock_ledger")
+
+    balances = {}
+    for entry in ledger:
+        icode = entry.get("item_code")
+        qty = float(entry.get("quantity") or 0.0)
+        raw_type = str(entry.get("transaction_type") or entry.get("movement_type") or "").upper()
+        if "IN" in raw_type or "ADD" in raw_type:
+            balances[icode] = balances.get(icode, 0.0) + qty
+        elif "OUT" in raw_type or "DEDUCT" in raw_type:
+            balances[icode] = balances.get(icode, 0.0) - qty
+
+    result = []
+    for it in items:
+        icode = it.get("item_code")
+        qty_on_hand = balances.get(icode, 0.0)
+        price = float(it.get("price") or 0.0)
+        cost_price = float(it.get("cost_price") or (price * 0.75))
+        min_alert = float(it.get("min_stock_alert") or 10.0)
+        result.append({
+            "item_code": icode,
+            "name": it.get("name"),
+            "category": it.get("category"),
+            "brand": it.get("brand"),
+            "price": price,
+            "quantity_on_hand": round(qty_on_hand, 2),
+            "inventory_valuation": round(qty_on_hand * price, 2),
+            "cost_valuation": round(qty_on_hand * cost_price, 2),
+            "min_stock_alert": min_alert,
+            "is_low_stock": qty_on_hand < min_alert
+        })
+    return result
 
 @app.get("/api/stock/low-stock", tags=["3. Inventory Management"])
 def get_low_stock_alerts():
@@ -389,11 +453,13 @@ def create_vendor(vendor: VendorCreate, user: Dict[str, Any] = Depends(require_r
     return {"message": "Vendor registered successfully", "vendor": vdoc}
 
 @app.get("/api/purchases", tags=["4. Supplier & Purchases"])
+@app.get("/api/purchases/invoices", tags=["4. Supplier & Purchases"])
 def list_purchases():
     """List all vendor purchase invoices (with per-item GST and Input Tax Credit details)."""
     return get_collection_data("purchase_invoice")
 
 @app.post("/api/purchases/invoice", tags=["4. Supplier & Purchases"])
+@app.post("/api/purchases/invoices", tags=["4. Supplier & Purchases"])
 def create_purchase_invoice(pur: PurchaseInvoiceCreate, user: Dict[str, Any] = Depends(require_roles(UserRole.ADMIN, UserRole.STORE_MANAGER))):
     """
     Record vendor procurement bill.
@@ -460,6 +526,7 @@ def create_purchase_invoice(pur: PurchaseInvoiceCreate, user: Dict[str, Any] = D
     return {
         "message": "Purchase invoice registered and stock IN logged",
         "purchase": purchase_doc,
+        "invoice": purchase_doc,
         "stock_ledger_entries": stock_entries
     }
 
@@ -497,9 +564,15 @@ def search_customer_by_phone(phone: str):
 # ---------------------------------------------------------------------------
 
 @app.get("/api/sales", tags=["6. Sales & POS Billing"])
+@app.get("/api/sales/invoices", tags=["6. Sales & POS Billing"])
 def list_sales():
     """List sales invoices."""
     return get_collection_data("sales_invoice")
+
+@app.get("/api/sales/returns", tags=["6. Sales & POS Billing"])
+def list_sales_returns():
+    """List all processed sales returns and refunds."""
+    return get_collection_data("sales_returns")
 
 @app.get("/api/sales/{invoice_no}", tags=["6. Sales & POS Billing"])
 def get_sales_invoice(invoice_no: str):
@@ -511,6 +584,7 @@ def get_sales_invoice(invoice_no: str):
     raise HTTPException(status_code=404, detail=f"Sales invoice '{invoice_no}' not found")
 
 @app.post("/api/sales/invoice", tags=["6. Sales & POS Billing"])
+@app.post("/api/sales/invoices", tags=["6. Sales & POS Billing"])
 def create_sales_invoice(sale: SalesInvoiceCreate, user: Dict[str, Any] = Depends(get_current_user)):
     """
     POS Billing API:
@@ -548,11 +622,13 @@ def create_sales_invoice(sale: SalesInvoiceCreate, user: Dict[str, Any] = Depend
                 "item_name": item_name,
                 "quantity": it.quantity,
                 "rate": rate,
+                "unit_price": rate,
                 "gst_percent": gst_pct,
                 "unit_tax": unit_tax,
                 "net_amount": line_net,
                 "gst_amount": line_tax,
-                "total_amount": line_total
+                "total_amount": line_total,
+                "line_total": line_total
             })
 
             stock_entries.append({
@@ -560,6 +636,8 @@ def create_sales_invoice(sale: SalesInvoiceCreate, user: Dict[str, Any] = Depend
                 "item_code": it.item_code,
                 "item_name": item_name,
                 "transaction_type": "OUT",
+                "movement_type": "OUT",
+                "voucher_type": "SALES_INVOICE",
                 "quantity": it.quantity,
                 "voucher_no": sale.invoice_no,
                 "date": invoice_date,
@@ -640,6 +718,126 @@ def create_sales_invoice(sale: SalesInvoiceCreate, user: Dict[str, Any] = Depend
         "stock_ledger_entry": stock_entries[0] if len(stock_entries) == 1 else None,
         "stock_ledger_entries": stock_entries
     }
+
+@app.post("/api/sales/{invoice_no}/return", tags=["5. Sales & Invoicing"])
+def process_sales_return(
+    invoice_no: str,
+    req: SalesReturnRequest,
+    user: Dict[str, Any] = Depends(require_roles(UserRole.ADMIN, UserRole.STORE_MANAGER, UserRole.CASHIER))
+):
+    """
+    Process product return and refund for an original sales invoice (Workflow D).
+    Validates items against original invoice, calculates refund amounts,
+    logs stock return into the audit ledger, and records the refund.
+    """
+    invoices = get_collection_data("sales_invoice")
+    orig_inv = None
+    for inv in invoices:
+        if inv.get("invoice_no") == invoice_no or inv.get("_id") == invoice_no:
+            orig_inv = inv
+            break
+    if not orig_inv:
+        raise HTTPException(status_code=404, detail=f"Original sales invoice '{invoice_no}' not found")
+
+    orig_items_map = {}
+    if "items" in orig_inv and isinstance(orig_inv["items"], list):
+        for it in orig_inv["items"]:
+            orig_items_map[it.get("item_code")] = it
+    elif orig_inv.get("item_code"):
+        orig_items_map[orig_inv.get("item_code")] = {
+            "item_code": orig_inv.get("item_code"),
+            "item_name": orig_inv.get("item_name", "Item"),
+            "rate": orig_inv.get("rate", 0.0),
+            "gst_percent": orig_inv.get("gst_percent", 5.0),
+            "quantity": orig_inv.get("quantity", 1.0)
+        }
+
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    return_id = req.return_no or f"RET-{invoice_no}-{int(datetime.datetime.now().timestamp())}"
+
+    refund_breakdown = []
+    total_refund_amount = 0.0
+    total_tax_refunded = 0.0
+
+    for r_item in req.return_items:
+        if r_item.item_code not in orig_items_map:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Item '{r_item.item_code}' was not part of original invoice '{invoice_no}'"
+            )
+        orig = orig_items_map[r_item.item_code]
+        if r_item.quantity > float(orig.get("quantity", 0.0)):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Return quantity ({r_item.quantity}) exceeds purchased quantity ({orig.get('quantity')}) for item '{r_item.item_code}'"
+            )
+
+        price = float(orig.get("rate") or orig.get("price") or 0.0)
+        gst_pct = float(orig.get("gst_percent") or 5.0)
+        tax_per_unit = round(price * (gst_pct / 100.0), 2)
+        unit_gross = price + tax_per_unit
+        line_refund = round(unit_gross * r_item.quantity, 2)
+        line_tax = round(tax_per_unit * r_item.quantity, 2)
+
+        total_refund_amount += line_refund
+        total_tax_refunded += line_tax
+
+        # If resellable, restore to stock
+        if r_item.condition.upper() == "RESELLABLE":
+            stock_entry = {
+                "_id": f"STK-{return_id}-{r_item.item_code}",
+                "item_code": r_item.item_code,
+                "movement_type": "IN",
+                "quantity": r_item.quantity,
+                "voucher_type": "SALES_RETURN",
+                "voucher_no": return_id,
+                "reason": r_item.reason or "Customer return",
+                "timestamp": now
+            }
+            save_collection_doc("stock_ledger", stock_entry)
+        else:
+            damage_entry = {
+                "_id": f"DAM-{return_id}-{r_item.item_code}",
+                "item_code": r_item.item_code,
+                "movement_type": "DAMAGE_HOLD",
+                "quantity": r_item.quantity,
+                "voucher_type": "SALES_RETURN_DAMAGED",
+                "voucher_no": return_id,
+                "reason": r_item.reason or "Damaged return",
+                "timestamp": now
+            }
+            save_collection_doc("stock_ledger", damage_entry)
+
+        refund_breakdown.append({
+            "item_code": r_item.item_code,
+            "item_name": orig.get("item_name", r_item.item_code),
+            "returned_quantity": r_item.quantity,
+            "unit_price": price,
+            "tax_per_unit": tax_per_unit,
+            "line_refund_total": line_refund,
+            "condition": r_item.condition.upper()
+        })
+
+    return_record = {
+        "_id": return_id,
+        "return_no": return_id,
+        "original_invoice_no": invoice_no,
+        "customer_name": orig_inv.get("customer_name", "Walk-in"),
+        "total_refund_amount": round(total_refund_amount, 2),
+        "total_tax_refunded": round(total_tax_refunded, 2),
+        "items_returned": refund_breakdown,
+        "notes": req.notes,
+        "processed_by": user.get("username"),
+        "created_at": now
+    }
+    save_collection_doc("sales_returns", return_record)
+
+    return {
+        "message": "Sales return processed successfully and inventory adjusted",
+        "return_record": return_record
+    }
+
+
 
 # ---------------------------------------------------------------------------
 # MODULE 7: COMMERCIAL PRINT INVOICE GENERATOR
@@ -871,6 +1069,7 @@ def print_existing_sales_invoice(invoice_no: str):
 # ---------------------------------------------------------------------------
 
 @app.get("/api/gst/report", tags=["8. Tax & Financial Reports"])
+@app.get("/api/gst/reconciliation", tags=["8. Tax & Financial Reports"])
 def get_gst_report():
     """
     Step 4 of Blueprint:
@@ -883,6 +1082,7 @@ def get_gst_report():
     return engine.generate_gst_payment_report()
 
 @app.get("/api/pnl", tags=["8. Tax & Financial Reports"])
+@app.get("/api/reports/pnl", tags=["8. Tax & Financial Reports"])
 def get_pnl_statement(operating_expenses: float = Query(850.0)):
     """
     Step 5 of Blueprint:

@@ -316,6 +316,50 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "2. Product Catalog"
+        ],
+        "summary": "Delete Item",
+        "description": "Delete an item from master catalogue (Admin only).",
+        "operationId": "delete_item_api_items__item_code__delete",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "item_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/items/barcode/{barcode}": {
@@ -475,6 +519,69 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/VendorCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/purchases/invoices": {
+      "get": {
+        "tags": [
+          "4. Supplier & Purchases"
+        ],
+        "summary": "List Purchases",
+        "description": "List all vendor purchase invoices (with per-item GST and Input Tax Credit details).",
+        "operationId": "list_purchases_api_purchases_invoices_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "4. Supplier & Purchases"
+        ],
+        "summary": "Create Purchase Invoice",
+        "description": "Record vendor procurement bill.\nSupports multiple items with differing per-item GST rates.\nAutomatically generates stock IN movements and books Input Tax Credit (ITC).",
+        "operationId": "create_purchase_invoice_api_purchases_invoices_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PurchaseInvoiceCreate"
               }
             }
           },
@@ -671,6 +778,69 @@
         }
       }
     },
+    "/api/sales/invoices": {
+      "get": {
+        "tags": [
+          "6. Sales & POS Billing"
+        ],
+        "summary": "List Sales",
+        "description": "List sales invoices.",
+        "operationId": "list_sales_api_sales_invoices_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "6. Sales & POS Billing"
+        ],
+        "summary": "Create Sales Invoice",
+        "description": "POS Billing API:\nSupports multi-item or single-item sales.\nCalculates line total via formula: Total = (Price + Tax) * Quantity.\nLogs Stock Ledger OUT movement.",
+        "operationId": "create_sales_invoice_api_sales_invoices_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SalesInvoiceCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/sales": {
       "get": {
         "tags": [
@@ -679,6 +849,26 @@
         "summary": "List Sales",
         "description": "List sales invoices.",
         "operationId": "list_sales_api_sales_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/sales/returns": {
+      "get": {
+        "tags": [
+          "6. Sales & POS Billing"
+        ],
+        "summary": "List Sales Returns",
+        "description": "List all processed sales returns and refunds.",
+        "operationId": "list_sales_returns_api_sales_returns_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -777,6 +967,62 @@
         ]
       }
     },
+    "/api/sales/{invoice_no}/return": {
+      "post": {
+        "tags": [
+          "5. Sales & Invoicing"
+        ],
+        "summary": "Process Sales Return",
+        "description": "Process product return and refund for an original sales invoice (Workflow D).\nValidates items against original invoice, calculates refund amounts,\nlogs stock return into the audit ledger, and records the refund.",
+        "operationId": "process_sales_return_api_sales__invoice_no__return_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "invoice_no",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Invoice No"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SalesReturnRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/invoice/print": {
       "post": {
         "tags": [
@@ -862,6 +1108,26 @@
         }
       }
     },
+    "/api/gst/reconciliation": {
+      "get": {
+        "tags": [
+          "8. Tax & Financial Reports"
+        ],
+        "summary": "Get Gst Report",
+        "description": "Step 4 of Blueprint:\nGovernment GST API & Input Tax Credit (ITC) Engine.\nReconciles GSTR-1 Output Tax vs GSTR-2B Input Tax Credit, calculating net cash tax payable and ITC carried forward.",
+        "operationId": "get_gst_report_api_gst_reconciliation_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/gst/report": {
       "get": {
         "tags": [
@@ -876,6 +1142,48 @@
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/reports/pnl": {
+      "get": {
+        "tags": [
+          "8. Tax & Financial Reports"
+        ],
+        "summary": "Get Pnl Statement",
+        "description": "Step 5 of Blueprint:\nERPNext Profit & Loss Statement:\nRevenue, Cost of Goods Sold (COGS), Gross Profit, Operating Expenses, and Net Operating Profit.",
+        "operationId": "get_pnl_statement_api_reports_pnl_get",
+        "parameters": [
+          {
+            "name": "operating_expenses",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "default": 850.0,
+              "title": "Operating Expenses"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -1085,12 +1393,14 @@
           },
           "price": {
             "type": "number",
+            "minimum": 0.0,
             "title": "Price"
           },
           "cost_price": {
             "anyOf": [
               {
-                "type": "number"
+                "type": "number",
+                "minimum": 0.0
               },
               {
                 "type": "null"
@@ -1100,11 +1410,13 @@
           },
           "gst_percent": {
             "type": "number",
+            "minimum": 0.0,
             "title": "Gst Percent",
             "default": 5.0
           },
           "min_stock_alert": {
             "type": "number",
+            "minimum": 0.0,
             "title": "Min Stock Alert",
             "default": 10.0
           }
@@ -1380,6 +1692,42 @@
         ],
         "title": "PurchaseItem"
       },
+      "ReturnItem": {
+        "properties": {
+          "item_code": {
+            "type": "string",
+            "title": "Item Code"
+          },
+          "quantity": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason",
+            "default": "Customer return"
+          },
+          "condition": {
+            "type": "string",
+            "title": "Condition",
+            "default": "RESELLABLE"
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_code",
+          "quantity"
+        ],
+        "title": "ReturnItem"
+      },
       "SalesInvoiceCreate": {
         "properties": {
           "invoice_no": {
@@ -1545,6 +1893,44 @@
         ],
         "title": "SalesItem"
       },
+      "SalesReturnRequest": {
+        "properties": {
+          "return_no": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return No"
+          },
+          "return_items": {
+            "items": {
+              "$ref": "#/components/schemas/ReturnItem"
+            },
+            "type": "array",
+            "title": "Return Items"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "return_items"
+        ],
+        "title": "SalesReturnRequest"
+      },
       "StockAdjustment": {
         "properties": {
           "item_code": {
@@ -1557,6 +1943,7 @@
           },
           "quantity": {
             "type": "number",
+            "exclusiveMinimum": 0.0,
             "title": "Quantity"
           },
           "reason": {
@@ -1610,6 +1997,7 @@
           },
           "password": {
             "type": "string",
+            "minLength": 6,
             "title": "Password"
           },
           "full_name": {

@@ -77,9 +77,11 @@ class ERPNextSyncService:
         return {
             "revenue": round(total_revenue, 2),
             "cost_of_goods_sold": round(total_cogs, 2),
+            "cogs": round(total_cogs, 2),
             "gross_profit": round(gross_profit, 2),
             "gross_profit_margin_percent": round(margin_pct, 2),
             "operating_expenses": round(operating_expenses, 2),
             "net_profit": round(net_profit, 2),
+            "net_operating_profit": round(net_profit, 2),
             "item_breakup": item_sales_breakup
         }
