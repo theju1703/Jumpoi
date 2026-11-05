@@ -52,7 +52,7 @@ fun DashboardScreen(
                 ) {
                     Column {
                         Text(
-                            text = "Jompoi ERP Hub",
+                            text = "Jumpoi ERP Hub",
                             color = TextPrimary,
                             fontWeight = FontWeight.Bold,
                             fontSize = 18.sp

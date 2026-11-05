@@ -14,12 +14,12 @@
 The Jompoi Supermarket ERP ecosystem consists of three major tiers:
 1. **Enterprise Backend REST API (FastAPI / Python 3.12):** Serves 22 endpoints covering Authentication/RBAC, Master Item Catalog, Real-Time Stock Ledger ($\sum \text{IN} - \sum \text{OUT}$), Vendor Procurement, Multi-Item POS Billing, Commercial Tax Invoicing, Returns/Refunds, GSTR-1 vs GSTR-2B Input Tax Credit (ITC) Reconciliation, ERPNext Profit & Loss, and BigQuery Cloud Data Warehouse Synchronization.
 2. **Database & Data Store Layer:** Dual-storage architecture leveraging MongoDB for real-time ACID transaction documents with in-memory fallback, and an embedded analytical warehouse emulator for audit views.
-3. **Native Android Application (Kotlin / Jetpack Compose / MVVM):** Mobile interface compiled into `apk/app-debug.apk` (12.2 MB), communicating over cleartext HTTP with automatic offline fallback data demonstration mode.
+3. **Native Android Application (Kotlin / Jetpack Compose / MVVM):** Mobile interface compiled into `apk/jumpoi.apk` (12.2 MB), communicating over cleartext HTTP with automatic offline fallback data demonstration mode.
 
 ```mermaid
 graph TD
     subgraph ClientLayer["Client Applications"]
-        AndroidApp["📱 Native Android App (apk/app-debug.apk)"]
+        AndroidApp["📱 Native Android App (apk/jumpoi.apk)"]
         WebPortal["💻 Live Web ERP (GitHub Pages)"]
         APIDocs["📖 Swagger Interactive Docs (/docs)"]
     end
@@ -138,7 +138,7 @@ During end-to-end testing, our comprehensive automated test suite surfaced 4 rea
 
 ## 6. Android Application Verification
 
-- **APK File:** [`apk/app-debug.apk`](https://github.com/theju1703/Jumpoi/raw/main/apk/app-debug.apk) (12,217,278 bytes)
+- **APK File:** [`apk/jumpoi.apk`](https://github.com/theju1703/Jumpoi/raw/main/apk/jumpoi.apk) (12,217,278 bytes)
 - **Target SDK:** Android 37 (Compatible with Android 7.0 Nougat / API 24 through Android 15 / API 35+)
 - **Architecture:** Clean Architecture with MVVM, Kotlin Coroutines, Jetpack Compose Material 3
 - **Network Stack:** Retrofit / OkHttp with cleartext traffic permitted for local ERP dev (`http://10.0.2.2:8080`)

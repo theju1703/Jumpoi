@@ -73,7 +73,7 @@ fun InvoicePrintScreen(
                             verticalAlignment = Alignment.Top
                         ) {
                             Column {
-                                Text("JOMPOI ONLINE GROCERY", color = Color(0xFF0F172A), fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
+                                Text("JUMPOI ONLINE GROCERY", color = Color(0xFF0F172A), fontWeight = FontWeight.ExtraBold, fontSize = 18.sp)
                                 Text("Wholesale & Retail Supermarket ERP", color = Color(0xFF64748B), fontSize = 11.sp)
                                 Text("GSTIN: 33AAAAA0000A1Z5", color = Color(0xFF64748B), fontSize = 10.sp)
                             }
@@ -193,7 +193,7 @@ fun InvoicePrintScreen(
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text("Computer-generated tax invoice.\nEligible for Input Tax Credit under GST.", color = Color(0xFF94A3B8), fontSize = 9.sp)
-                            Text("Authorized Signatory\nJompoi Online Grocery", color = Color(0xFF64748B), fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                            Text("Authorized Signatory\nJumpoi Online Grocery", color = Color(0xFF64748B), fontSize = 9.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

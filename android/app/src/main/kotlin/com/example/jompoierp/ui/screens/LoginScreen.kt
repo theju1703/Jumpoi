@@ -60,7 +60,7 @@ fun LoginScreen(
                 Spacer(modifier = Modifier.height(16.dp))
 
                 Text(
-                    text = "Jompoi Supermarket ERP",
+                    text = "Jumpoi Supermarket ERP",
                     color = TextPrimary,
                     fontSize = 20.sp,
                     fontWeight = FontWeight.Bold

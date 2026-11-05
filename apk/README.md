@@ -1,35 +1,35 @@
-# Jompoi ERP - Android Mobile Application (APK)
+# Jumpoi ERP - Android Mobile Application (APK)
 
-This folder contains the compiled, verified, and production-ready Android application package (APK) for the **Jompoi Supermarket ERP System**.
+This folder contains the compiled, verified, and production-ready Android application package (APK) for the **Jumpoi Supermarket ERP System**.
 
 ---
 
 ## 📱 Quick Download Links
 
 - **Direct Raw APK Download (GitHub):**  
-  [https://github.com/theju1703/Jumpoi/raw/main/apk/app-debug.apk](https://github.com/theju1703/Jumpoi/raw/main/apk/app-debug.apk)
+  [https://github.com/theju1703/Jumpoi/raw/main/apk/jumpoi.apk](https://github.com/theju1703/Jumpoi/raw/main/apk/jumpoi.apk)
 
 - **Repository File Location:**  
-  `apk/app-debug.apk` (Size: ~12.2 MB)
+  `apk/jumpoi.apk` (Size: ~12.7 MB)
 
 ---
 
 ## 🚀 Installation & Testing Instructions
 
 ### Option 1: Sideload onto Physical Android Device (Phone / Tablet)
-1. Download `app-debug.apk` directly to your Android device using Chrome or file transfer.
+1. Download `jumpoi.apk` directly to your Android device using Chrome or file transfer.
 2. If prompted, tap **Settings** and allow **"Install unknown apps"** for your browser or file manager.
-3. Tap **Install** and open **Jompoi ERP**.
+3. Tap **Install** and open **Jumpoi**.
 4. The application opens directly to the authentication screen with pre-configured 1-tap demo roles or manual login.
 
 ### Option 2: Run via Android Studio Emulator
 1. Start an Android Virtual Device (AVD) from Android Studio Device Manager.
 2. In your terminal, run:
    ```bash
-   adb install -r apk/app-debug.apk
+   adb install -r apk/jumpoi.apk
    ```
-3. Alternatively, drag and drop `apk/app-debug.apk` directly onto the running emulator window.
-4. Launch **Jompoi ERP** from the emulator app drawer.
+3. Alternatively, drag and drop `apk/jumpoi.apk` directly onto the running emulator window.
+4. Launch **Jumpoi** from the emulator app drawer.
 
 ---
 
@@ -57,6 +57,7 @@ The Android application is configured with cleartext HTTP support (`usesCleartex
 
 ## 🛠 Features & Verification Matrix
 
+- ✅ **App Display Name:** `Jumpoi` on Android Launcher & Home screen.
 - ✅ **Authentication:** JWT Bearer token management with auto-refresh and role enforcement.
 - ✅ **POS Billing:** Live barcode search, item lookup, custom pricing, discount calculation.
 - ✅ **Invoice Printing:** Commercial Tax Invoice with exact formula $\text{Total} = (\text{Price} + \text{Tax}) \times \text{Quantity}$ and printable table view.
