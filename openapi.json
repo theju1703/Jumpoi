@@ -425,15 +425,44 @@
         "tags": [
           "3. Inventory Management"
         ],
-        "summary": "Get Stock Position",
-        "description": "Retrieve real-time stock position (quantity on hand & valuation) aggregated across all ledger movements.",
+        "summary": "Real-time warehouse stock balance & valuation",
+        "description": "Retrieve real-time stock position aggregated across all ledger movements (sum(IN) - sum(OUT)).\nSupports query parameter ?low_stock_only=true to filter safety stock alerts.",
         "operationId": "get_stock_position_api_stock_get",
+        "parameters": [
+          {
+            "name": "low_stock_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": false,
+              "title": "Low Stock Only"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -445,8 +474,8 @@
         "tags": [
           "3. Inventory Management"
         ],
-        "summary": "Get Low Stock Alerts",
-        "description": "List items that have reached or dropped below their minimum safety stock alert threshold.",
+        "summary": "Low safety stock alerts (Consolidated alias)",
+        "description": "List items that have reached or dropped below their minimum safety stock alert threshold.\nConsolidated alias delegating to get_stock_position(low_stock_only=True).",
         "operationId": "get_low_stock_alerts_api_stock_low_stock_get",
         "responses": {
           "200": {
@@ -568,75 +597,12 @@
         ]
       }
     },
-    "/api/purchases/invoices": {
-      "get": {
-        "tags": [
-          "4. Supplier & Purchases"
-        ],
-        "summary": "List Purchases",
-        "description": "List all vendor purchase invoices (with per-item GST and Input Tax Credit details).",
-        "operationId": "list_purchases_api_purchases_invoices_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "4. Supplier & Purchases"
-        ],
-        "summary": "Create Purchase Invoice",
-        "description": "Record vendor procurement bill.\nSupports multiple items with differing per-item GST rates.\nAutomatically generates stock IN movements and books Input Tax Credit (ITC).",
-        "operationId": "create_purchase_invoice_api_purchases_invoices_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PurchaseInvoiceCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
     "/api/purchases": {
       "get": {
         "tags": [
           "4. Supplier & Purchases"
         ],
-        "summary": "List Purchases",
+        "summary": "List vendor procurement invoices",
         "description": "List all vendor purchase invoices (with per-item GST and Input Tax Credit details).",
         "operationId": "list_purchases_api_purchases_get",
         "responses": {
@@ -656,7 +622,7 @@
         "tags": [
           "4. Supplier & Purchases"
         ],
-        "summary": "Create Purchase Invoice",
+        "summary": "Record vendor procurement invoice (increases stock & books ITC)",
         "description": "Record vendor procurement bill.\nSupports multiple items with differing per-item GST rates.\nAutomatically generates stock IN movements and books Input Tax Credit (ITC).",
         "operationId": "create_purchase_invoice_api_purchases_invoice_post",
         "requestBody": {
@@ -701,15 +667,59 @@
         "tags": [
           "5. Customers"
         ],
-        "summary": "List Customers",
-        "description": "List all registered customers.",
+        "summary": "List & search customer directory",
+        "description": "List registered customers. Supports unified search filter across name, phone, city, or ID,\nas well as dedicated ?phone= lookup for POS counter terminals.",
         "operationId": "list_customers_api_customers_get",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "phone",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Phone"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -719,18 +729,18 @@
         "tags": [
           "5. Customers"
         ],
-        "summary": "Create Customer",
+        "summary": "Register new customer",
         "description": "Register customer for CRM & POS billing.",
         "operationId": "create_customer_api_customers_post",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CustomerCreate"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -759,9 +769,10 @@
         "tags": [
           "5. Customers"
         ],
-        "summary": "Search Customer By Phone",
-        "description": "Look up customer by mobile phone at POS counter.",
+        "summary": "Search customer by phone (Consolidated alias)",
+        "description": "Look up customer by mobile phone at POS counter.\n[Consolidated]: Prefer GET /api/customers?phone={phone}.",
         "operationId": "search_customer_by_phone_api_customers_search_get",
+        "deprecated": true,
         "parameters": [
           {
             "name": "phone",
@@ -795,75 +806,12 @@
         }
       }
     },
-    "/api/sales/invoices": {
-      "get": {
-        "tags": [
-          "6. Sales & POS Billing"
-        ],
-        "summary": "List Sales",
-        "description": "List sales invoices.",
-        "operationId": "list_sales_api_sales_invoices_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "6. Sales & POS Billing"
-        ],
-        "summary": "Create Sales Invoice",
-        "description": "POS Billing API:\nSupports multi-item or single-item sales.\nCalculates line total via formula: Total = (Price + Tax) * Quantity.\nLogs Stock Ledger OUT movement.",
-        "operationId": "create_sales_invoice_api_sales_invoices_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SalesInvoiceCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
     "/api/sales": {
       "get": {
         "tags": [
           "6. Sales & POS Billing"
         ],
-        "summary": "List Sales",
+        "summary": "List customer sales invoices",
         "description": "List sales invoices.",
         "operationId": "list_sales_api_sales_get",
         "responses": {
@@ -944,7 +892,7 @@
         "tags": [
           "6. Sales & POS Billing"
         ],
-        "summary": "Create Sales Invoice",
+        "summary": "Create customer sales invoice (decreases stock & collects GST)",
         "description": "POS Billing API:\nSupports multi-item or single-item sales.\nCalculates line total via formula: Total = (Price + Tax) * Quantity.\nLogs Stock Ledger OUT movement.",
         "operationId": "create_sales_invoice_api_sales_invoice_post",
         "requestBody": {
@@ -987,9 +935,9 @@
     "/api/sales/{invoice_no}/return": {
       "post": {
         "tags": [
-          "5. Sales & Invoicing"
+          "6. Sales & POS Billing"
         ],
-        "summary": "Process Sales Return",
+        "summary": "Process product return, refund & audit stock restoration",
         "description": "Process product return and refund for an original sales invoice (Workflow D).\nValidates items against original invoice, calculates refund amounts,\nlogs stock return into the audit ledger, and records the refund.",
         "operationId": "process_sales_return_api_sales__invoice_no__return_post",
         "security": [
@@ -1040,14 +988,15 @@
         }
       }
     },
-    "/api/invoice/print": {
+    "/api/sales/print": {
       "post": {
         "tags": [
+          "6. Sales & POS Billing",
           "7. Commercial Print Invoice"
         ],
-        "summary": "Print Invoice Custom",
+        "summary": "Commercial printable sales tax invoice generator",
         "description": "Renders commercial printable invoice from given JSON payload.\nFeatures: Item Name, Item Description (Optional), Quantity, Price, Tax, and Total = (Price + Tax) * Quantity.",
-        "operationId": "print_invoice_custom_api_invoice_print_post",
+        "operationId": "print_invoice_custom_api_sales_print_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1082,14 +1031,15 @@
         }
       }
     },
-    "/api/invoice/{invoice_no}/print": {
+    "/api/sales/{invoice_no}/print": {
       "get": {
         "tags": [
+          "6. Sales & POS Billing",
           "7. Commercial Print Invoice"
         ],
-        "summary": "Print Existing Sales Invoice",
+        "summary": "Print official sales invoice by invoice number",
         "description": "Look up an existing sales invoice by number and render its printable commercial invoice.",
-        "operationId": "print_existing_sales_invoice_api_invoice__invoice_no__print_get",
+        "operationId": "print_existing_sales_invoice_api_sales__invoice_no__print_get",
         "parameters": [
           {
             "name": "invoice_no",
@@ -1217,7 +1167,7 @@
         "tags": [
           "8. Tax & Financial Reports"
         ],
-        "summary": "Get Gst Report",
+        "summary": "GSTR reconciliation alias",
         "description": "Step 4 of Blueprint:\nGovernment GST API & Input Tax Credit (ITC) Engine.\nReconciles GSTR-1 Output Tax vs GSTR-2B Input Tax Credit, calculating net cash tax payable and ITC carried forward.",
         "operationId": "get_gst_report_api_gst_reconciliation_get",
         "responses": {
@@ -1229,7 +1179,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/gst/report": {
@@ -1237,7 +1188,7 @@
         "tags": [
           "8. Tax & Financial Reports"
         ],
-        "summary": "Get Gst Report",
+        "summary": "GST Input Tax Credit reconciliation (GSTR-1 vs GSTR-2B)",
         "description": "Step 4 of Blueprint:\nGovernment GST API & Input Tax Credit (ITC) Engine.\nReconciles GSTR-1 Output Tax vs GSTR-2B Input Tax Credit, calculating net cash tax payable and ITC carried forward.",
         "operationId": "get_gst_report_api_gst_report_get",
         "responses": {
@@ -1257,9 +1208,10 @@
         "tags": [
           "8. Tax & Financial Reports"
         ],
-        "summary": "Get Pnl Statement",
+        "summary": "P&L statement alias",
         "description": "Step 5 of Blueprint:\nERPNext Profit & Loss Statement:\nRevenue, Cost of Goods Sold (COGS), Gross Profit, Operating Expenses, and Net Operating Profit.",
         "operationId": "get_pnl_statement_api_reports_pnl_get",
+        "deprecated": true,
         "parameters": [
           {
             "name": "operating_expenses",
@@ -1299,7 +1251,7 @@
         "tags": [
           "8. Tax & Financial Reports"
         ],
-        "summary": "Get Pnl Statement",
+        "summary": "Profit & Loss accounting statement",
         "description": "Step 5 of Blueprint:\nERPNext Profit & Loss Statement:\nRevenue, Cost of Goods Sold (COGS), Gross Profit, Operating Expenses, and Net Operating Profit.",
         "operationId": "get_pnl_statement_api_pnl_get",
         "parameters": [
@@ -1356,12 +1308,38 @@
         }
       }
     },
+    "/api/sync/trigger": {
+      "post": {
+        "tags": [
+          "9. Cloud DW Pipeline"
+        ],
+        "summary": "ETL trigger alias",
+        "description": "Step 2 of Blueprint:\nTriggers incremental ETL pipeline synchronizing operational collections to BigQuery dataset `jompoi_reporting`.",
+        "operationId": "trigger_etl_sync_api_sync_trigger_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "deprecated": true,
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/etl/sync": {
       "post": {
         "tags": [
           "9. Cloud DW Pipeline"
         ],
-        "summary": "Trigger Etl Sync",
+        "summary": "Trigger BigQuery Cloud DW ETL sync pipeline",
         "description": "Step 2 of Blueprint:\nTriggers incremental ETL pipeline synchronizing operational collections to BigQuery dataset `jompoi_reporting`.",
         "operationId": "trigger_etl_sync_api_etl_sync_post",
         "responses": {

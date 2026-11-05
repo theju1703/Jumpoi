@@ -443,64 +443,62 @@ def delete_item(item_code: str, user: Dict[str, Any] = Depends(require_roles(Use
 # MODULE 3: INVENTORY & STOCK MANAGEMENT
 # ---------------------------------------------------------------------------
 
-@app.get("/api/stock", tags=["3. Inventory Management"])
-def get_stock_position():
-    """Retrieve real-time stock position (quantity on hand & valuation) aggregated across all ledger movements."""
+@app.get("/api/stock", tags=["3. Inventory Management"], summary="Real-time warehouse stock balance & valuation")
+def get_stock_position(low_stock_only: Optional[bool] = False):
+    """
+    Retrieve real-time stock position aggregated across all ledger movements (sum(IN) - sum(OUT)).
+    Supports query parameter ?low_stock_only=true to filter safety stock alerts.
+    """
     items = get_collection_data("items")
-    ledger = get_collection_data("stock_ledger")
-
-    balances = {}
-    for entry in ledger:
-        icode = entry.get("item_code")
-        qty = float(entry.get("quantity") or 0.0)
-        raw_type = str(entry.get("transaction_type") or entry.get("movement_type") or "").upper()
-        if "IN" in raw_type or "ADD" in raw_type:
-            balances[icode] = balances.get(icode, 0.0) + qty
-        elif "OUT" in raw_type or "DEDUCT" in raw_type:
-            balances[icode] = balances.get(icode, 0.0) - qty
+    balances = get_stock_balances()
 
     result = []
     for it in items:
         icode = it.get("item_code")
-        qty_on_hand = balances.get(icode, 0.0)
+        qty_on_hand = round(balances.get(icode, 0.0), 2)
         price = float(it.get("price") or 0.0)
         cost_price = float(it.get("cost_price") or (price * 0.75))
         min_alert = float(it.get("min_stock_alert") or 10.0)
+        is_low = qty_on_hand <= min_alert
+
+        if low_stock_only and not is_low:
+            continue
+
         result.append({
             "item_code": icode,
             "name": it.get("name"),
+            "item_name": it.get("name"),
             "category": it.get("category"),
             "brand": it.get("brand"),
             "price": price,
-            "quantity_on_hand": round(qty_on_hand, 2),
+            "unit_valuation": price,
+            "quantity_on_hand": qty_on_hand,
+            "current_stock": qty_on_hand,
             "inventory_valuation": round(qty_on_hand * price, 2),
             "cost_valuation": round(qty_on_hand * cost_price, 2),
             "min_stock_alert": min_alert,
-            "is_low_stock": qty_on_hand < min_alert
+            "is_low_stock": is_low,
+            "status": "REORDER_NOW" if qty_on_hand <= 0 else ("LOW_STOCK" if is_low else "IN_STOCK")
         })
     return result
 
-@app.get("/api/stock/low-stock", tags=["3. Inventory Management"])
+@app.get("/api/stock/low-stock", tags=["3. Inventory Management"], summary="Low safety stock alerts (Consolidated alias)")
 def get_low_stock_alerts():
-    """List items that have reached or dropped below their minimum safety stock alert threshold."""
-    stock_pos = get_stock_position()
-    items = {it.get("item_code"): it for it in get_collection_data("items")}
-    
-    low_stock = []
-    for sp in stock_pos:
-        code = sp.get("item_code")
-        curr_stock = sp.get("current_stock", 0)
-        master = items.get(code, {})
-        min_threshold = master.get("min_stock_alert", 10.0)
-        if curr_stock <= min_threshold:
-            low_stock.append({
-                "item_code": code,
-                "item_name": sp.get("item_name"),
-                "current_stock": curr_stock,
-                "min_stock_alert": min_threshold,
-                "status": "REORDER_NOW" if curr_stock <= 0 else "LOW_STOCK"
-            })
-    return low_stock
+    """
+    List items that have reached or dropped below their minimum safety stock alert threshold.
+    Consolidated alias delegating to get_stock_position(low_stock_only=True).
+    """
+    alerts = get_stock_position(low_stock_only=True)
+    return [
+        {
+            "item_code": a["item_code"],
+            "item_name": a["name"],
+            "current_stock": a["current_stock"],
+            "min_stock_alert": a["min_stock_alert"],
+            "status": a["status"]
+        }
+        for a in alerts
+    ]
 
 @app.post("/api/stock/adjust", tags=["3. Inventory Management"])
 def adjust_stock(adj: StockAdjustment, user: Dict[str, Any] = Depends(require_roles(UserRole.ADMIN, UserRole.STORE_MANAGER))):
@@ -549,14 +547,15 @@ def create_vendor(vendor: VendorCreate, user: Dict[str, Any] = Depends(require_r
     save_collection_doc("vendors", vdoc)
     return {"message": "Vendor registered successfully", "vendor": vdoc}
 
-@app.get("/api/purchases", tags=["4. Supplier & Purchases"])
-@app.get("/api/purchases/invoices", tags=["4. Supplier & Purchases"])
+@app.get("/api/purchases", tags=["4. Supplier & Purchases"], summary="List vendor procurement invoices")
+@app.get("/api/purchases/invoices", tags=["4. Supplier & Purchases"], include_in_schema=False)
 def list_purchases():
     """List all vendor purchase invoices (with per-item GST and Input Tax Credit details)."""
     return get_collection_data("purchase_invoice")
 
-@app.post("/api/purchases/invoice", tags=["4. Supplier & Purchases"])
-@app.post("/api/purchases/invoices", tags=["4. Supplier & Purchases"])
+@app.post("/api/purchases/invoice", tags=["4. Supplier & Purchases"], summary="Record vendor procurement invoice (increases stock & books ITC)")
+@app.post("/api/purchases/invoices", tags=["4. Supplier & Purchases"], include_in_schema=False)
+@app.post("/api/purchases", tags=["4. Supplier & Purchases"], include_in_schema=False)
 def create_purchase_invoice(pur: PurchaseInvoiceCreate, user: Dict[str, Any] = Depends(require_roles(UserRole.ADMIN, UserRole.STORE_MANAGER))):
     """
     Record vendor procurement bill.
@@ -631,12 +630,27 @@ def create_purchase_invoice(pur: PurchaseInvoiceCreate, user: Dict[str, Any] = D
 # MODULE 5: CUSTOMER MANAGEMENT
 # ---------------------------------------------------------------------------
 
-@app.get("/api/customers", tags=["5. Customers"])
-def list_customers():
-    """List all registered customers."""
-    return get_collection_data("customers")
+@app.get("/api/customers", tags=["5. Customers"], summary="List & search customer directory")
+def list_customers(search: Optional[str] = None, phone: Optional[str] = None):
+    """
+    List registered customers. Supports unified search filter across name, phone, city, or ID,
+    as well as dedicated ?phone= lookup for POS counter terminals.
+    """
+    customers = get_collection_data("customers")
+    if phone:
+        customers = [c for c in customers if c.get("phone") == phone]
+    if search:
+        s = search.lower().strip()
+        customers = [
+            c for c in customers
+            if s in c.get("name", "").lower()
+            or s in str(c.get("phone", "")).lower()
+            or s in c.get("customer_id", "").lower()
+            or s in c.get("city", "").lower()
+        ]
+    return customers
 
-@app.post("/api/customers", tags=["5. Customers"])
+@app.post("/api/customers", tags=["5. Customers"], summary="Register new customer")
 def create_customer(customer: CustomerCreate):
     """Register customer for CRM & POS billing."""
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
@@ -647,21 +661,23 @@ def create_customer(customer: CustomerCreate):
     save_collection_doc("customers", new_doc)
     return {"message": "Customer registered successfully", "customer": new_doc}
 
-@app.get("/api/customers/search", tags=["5. Customers"])
+@app.get("/api/customers/search", tags=["5. Customers"], deprecated=True, summary="Search customer by phone (Consolidated alias)")
 def search_customer_by_phone(phone: str):
-    """Look up customer by mobile phone at POS counter."""
-    customers = get_collection_data("customers")
-    for c in customers:
-        if c.get("phone") == phone:
-            return c
+    """
+    Look up customer by mobile phone at POS counter.
+    [Consolidated]: Prefer GET /api/customers?phone={phone}.
+    """
+    matches = list_customers(phone=phone)
+    if matches:
+        return matches[0]
     raise HTTPException(status_code=404, detail="Customer not found with given phone number")
 
 # ---------------------------------------------------------------------------
 # MODULE 6: SALES & POS BILLING MANAGEMENT
 # ---------------------------------------------------------------------------
 
-@app.get("/api/sales", tags=["6. Sales & POS Billing"])
-@app.get("/api/sales/invoices", tags=["6. Sales & POS Billing"])
+@app.get("/api/sales", tags=["6. Sales & POS Billing"], summary="List customer sales invoices")
+@app.get("/api/sales/invoices", tags=["6. Sales & POS Billing"], include_in_schema=False)
 def list_sales():
     """List sales invoices."""
     return get_collection_data("sales_invoice")
@@ -680,8 +696,9 @@ def get_sales_invoice(invoice_no: str):
             return inv
     raise HTTPException(status_code=404, detail=f"Sales invoice '{invoice_no}' not found")
 
-@app.post("/api/sales/invoice", tags=["6. Sales & POS Billing"])
-@app.post("/api/sales/invoices", tags=["6. Sales & POS Billing"])
+@app.post("/api/sales/invoice", tags=["6. Sales & POS Billing"], summary="Create customer sales invoice (decreases stock & collects GST)")
+@app.post("/api/sales/invoices", tags=["6. Sales & POS Billing"], include_in_schema=False)
+@app.post("/api/sales", tags=["6. Sales & POS Billing"], include_in_schema=False)
 def create_sales_invoice(sale: SalesInvoiceCreate, user: Dict[str, Any] = Depends(get_current_user)):
     """
     POS Billing API:
@@ -816,7 +833,7 @@ def create_sales_invoice(sale: SalesInvoiceCreate, user: Dict[str, Any] = Depend
         "stock_ledger_entries": stock_entries
     }
 
-@app.post("/api/sales/{invoice_no}/return", tags=["5. Sales & Invoicing"])
+@app.post("/api/sales/{invoice_no}/return", tags=["6. Sales & POS Billing"], summary="Process product return, refund & audit stock restoration")
 def process_sales_return(
     invoice_no: str,
     req: SalesReturnRequest,
@@ -1093,7 +1110,8 @@ def generate_invoice_html(invoice_no: str, invoice_date: str, customer_name: str
 </html>"""
     return html
 
-@app.post("/api/invoice/print", tags=["7. Commercial Print Invoice"], response_class=HTMLResponse)
+@app.post("/api/sales/print", tags=["6. Sales & POS Billing", "7. Commercial Print Invoice"], response_class=HTMLResponse, summary="Commercial printable sales tax invoice generator")
+@app.post("/api/invoice/print", tags=["7. Commercial Print Invoice"], response_class=HTMLResponse, include_in_schema=False)
 def print_invoice_custom(req: PrintInvoiceRequest):
     """
     Renders commercial printable invoice from given JSON payload.
@@ -1118,7 +1136,8 @@ def print_invoice_custom(req: PrintInvoiceRequest):
     )
     return HTMLResponse(content=html_content)
 
-@app.get("/api/invoice/{invoice_no}/print", tags=["7. Commercial Print Invoice"], response_class=HTMLResponse)
+@app.get("/api/sales/{invoice_no}/print", tags=["6. Sales & POS Billing", "7. Commercial Print Invoice"], response_class=HTMLResponse, summary="Print official sales invoice by invoice number")
+@app.get("/api/invoice/{invoice_no}/print", tags=["7. Commercial Print Invoice"], response_class=HTMLResponse, include_in_schema=False)
 def print_existing_sales_invoice(invoice_no: str):
     """Look up an existing sales invoice by number and render its printable commercial invoice."""
     invoices = get_collection_data("sales_invoice")
@@ -1404,8 +1423,8 @@ def print_existing_purchase_invoice(invoice_no: str):
 # MODULE 8: GST TAX CREDIT RECONCILIATION & ERPNEXT P&L REPORTS
 # ---------------------------------------------------------------------------
 
-@app.get("/api/gst/report", tags=["8. Tax & Financial Reports"])
-@app.get("/api/gst/reconciliation", tags=["8. Tax & Financial Reports"])
+@app.get("/api/gst/report", tags=["8. Tax & Financial Reports"], summary="GST Input Tax Credit reconciliation (GSTR-1 vs GSTR-2B)")
+@app.get("/api/gst/reconciliation", tags=["8. Tax & Financial Reports"], deprecated=True, summary="GSTR reconciliation alias")
 def get_gst_report():
     """
     Step 4 of Blueprint:
@@ -1417,8 +1436,8 @@ def get_gst_report():
     engine = GSTReconciliationEngine(sales, purchases)
     return engine.generate_gst_payment_report()
 
-@app.get("/api/pnl", tags=["8. Tax & Financial Reports"])
-@app.get("/api/reports/pnl", tags=["8. Tax & Financial Reports"])
+@app.get("/api/pnl", tags=["8. Tax & Financial Reports"], summary="Profit & Loss accounting statement")
+@app.get("/api/reports/pnl", tags=["8. Tax & Financial Reports"], deprecated=True, summary="P&L statement alias")
 def get_pnl_statement(operating_expenses: float = Query(850.0)):
     """
     Step 5 of Blueprint:
@@ -1457,7 +1476,8 @@ def get_executive_summary():
 # MODULE 9: BIGQUERY CLOUD DATA WAREHOUSE ETL SYNC
 # ---------------------------------------------------------------------------
 
-@app.post("/api/etl/sync", tags=["9. Cloud DW Pipeline"])
+@app.post("/api/etl/sync", tags=["9. Cloud DW Pipeline"], summary="Trigger BigQuery Cloud DW ETL sync pipeline")
+@app.post("/api/sync/trigger", tags=["9. Cloud DW Pipeline"], deprecated=True, summary="ETL trigger alias")
 def trigger_etl_sync(user: Dict[str, Any] = Depends(require_roles(UserRole.ADMIN))):
     """
     Step 2 of Blueprint:
