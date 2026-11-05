@@ -21,3 +21,14 @@ val LightBg = Color(0xFFF8FAFC)
 val LightCard = Color(0xFFFFFFFF)
 val LightBorder = Color(0xFFE2E8F0)
 val LightText = Color(0xFF0F172A)
+
+// Material3 Theme mappings
+val primaryDark = AccentBlue
+val primaryContainerDark = BgSecondary
+val secondaryDark = AccentEmerald
+val tertiaryDark = AccentAmber
+
+val primaryLight = AccentBlueDark
+val primaryContainerLight = LightCard
+val secondaryLight = AccentEmerald
+val tertiaryLight = AccentAmber
