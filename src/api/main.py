@@ -50,6 +50,7 @@ class ItemCreate(BaseModel):
     cost_price: Optional[float] = Field(default=None, ge=0)
     gst_percent: float = Field(default=5.0, ge=0)
     min_stock_alert: float = Field(default=10.0, ge=0)
+    opening_stock: Optional[float] = Field(default=0.0, ge=0)
 
 class ItemUpdate(BaseModel):
     name: Optional[str] = None
@@ -138,6 +139,21 @@ class PrintInvoiceItem(BaseModel):
     quantity: float
     price: float
     tax_percent: float = 5.0
+
+class PrintPurchaseInvoiceItem(BaseModel):
+    item_name: str
+    item_description: Optional[str] = None
+    quantity: float = Field(..., gt=0)
+    price: float = Field(..., ge=0)
+    tax_percent: float = Field(default=5.0, ge=0)
+
+class PrintPurchaseInvoiceRequest(BaseModel):
+    invoice_no: str
+    invoice_date: str
+    vendor_name: str
+    vendor_gstin: Optional[str] = None
+    vendor_address: Optional[str] = None
+    items: List[PrintPurchaseInvoiceItem]
 
 class PrintInvoiceRequest(BaseModel):
     invoice_no: str
@@ -256,41 +272,103 @@ def get_current_user_profile(user: Dict[str, Any] = Depends(get_current_user)):
     }
 
 # ---------------------------------------------------------------------------
+def get_stock_balances() -> Dict[str, float]:
+    """Compute net real-time balance on hand (sum(IN) - sum(OUT)) for all items."""
+    ledger = get_collection_data("stock_ledger")
+    balances: Dict[str, float] = {}
+    for entry in ledger:
+        icode = entry.get("item_code")
+        qty = float(entry.get("quantity") or 0.0)
+        raw_type = str(entry.get("transaction_type") or entry.get("movement_type") or "").upper()
+        if "IN" in raw_type or "ADD" in raw_type:
+            balances[icode] = balances.get(icode, 0.0) + qty
+        elif "OUT" in raw_type or "DEDUCT" in raw_type:
+            balances[icode] = balances.get(icode, 0.0) - qty
+    return balances
+
+# ---------------------------------------------------------------------------
 # MODULE 2: PRODUCT & CATALOG MANAGEMENT
 # ---------------------------------------------------------------------------
 
 @app.get("/api/items", tags=["2. Product Catalog"])
-def list_items(category: Optional[str] = None, search: Optional[str] = None):
-    """List all products in catalog with optional category and search filters."""
+def list_items(category: Optional[str] = None, search: Optional[str] = None, in_stock_only: Optional[bool] = False):
+    """
+    List all products in catalog with real-time stock quantities on hand.
+    Supports filtering by category, search by item name/code/brand, and stock status.
+    """
     items = get_collection_data("items")
+    balances = get_stock_balances()
+
+    enriched_items = []
+    for it in items:
+        icode = it.get("item_code")
+        qty = round(balances.get(icode, 0.0), 2)
+        min_alert = float(it.get("min_stock_alert") or 10.0)
+        status_label = "IN_STOCK" if qty > min_alert else ("LOW_STOCK" if qty > 0 else "OUT_OF_STOCK")
+
+        item_copy = dict(it)
+        item_copy["quantity_on_hand"] = qty
+        item_copy["in_stock"] = qty > 0
+        item_copy["stock_status"] = status_label
+        enriched_items.append(item_copy)
+
     if category:
-        items = [it for it in items if it.get("category", "").lower() == category.lower()]
+        enriched_items = [it for it in enriched_items if it.get("category", "").lower() == category.lower()]
     if search:
-        s = search.lower()
-        items = [it for it in items if s in it.get("name", "").lower() or s in it.get("item_code", "").lower() or s in it.get("brand", "").lower()]
-    return items
+        s = search.lower().strip()
+        enriched_items = [
+            it for it in enriched_items
+            if s in it.get("name", "").lower()
+            or s in it.get("item_code", "").lower()
+            or s in it.get("brand", "").lower()
+            or s in it.get("category", "").lower()
+            or s in str(it.get("barcode", "")).lower()
+        ]
+    if in_stock_only:
+        enriched_items = [it for it in enriched_items if it.get("in_stock")]
+
+    return enriched_items
 
 @app.get("/api/items/{item_code}", tags=["2. Product Catalog"])
 def get_item(item_code: str):
-    """Retrieve item details by item_code."""
+    """Retrieve item details by item_code along with current quantity on hand."""
     items = get_collection_data("items")
+    balances = get_stock_balances()
     for it in items:
         if it.get("item_code") == item_code or it.get("_id") == item_code:
-            return it
+            icode = it.get("item_code")
+            qty = round(balances.get(icode, 0.0), 2)
+            min_alert = float(it.get("min_stock_alert") or 10.0)
+            res = dict(it)
+            res["quantity_on_hand"] = qty
+            res["in_stock"] = qty > 0
+            res["stock_status"] = "IN_STOCK" if qty > min_alert else ("LOW_STOCK" if qty > 0 else "OUT_OF_STOCK")
+            return res
     raise HTTPException(status_code=404, detail=f"Item '{item_code}' not found")
 
 @app.get("/api/items/barcode/{barcode}", tags=["2. Product Catalog"])
 def get_item_by_barcode(barcode: str):
-    """Barcode lookup for POS scanning terminals."""
+    """Barcode lookup for POS scanning terminals with current stock availability."""
     items = get_collection_data("items")
+    balances = get_stock_balances()
     for it in items:
         if it.get("barcode") == barcode or it.get("item_code") == barcode:
-            return it
+            icode = it.get("item_code")
+            qty = round(balances.get(icode, 0.0), 2)
+            min_alert = float(it.get("min_stock_alert") or 10.0)
+            res = dict(it)
+            res["quantity_on_hand"] = qty
+            res["in_stock"] = qty > 0
+            res["stock_status"] = "IN_STOCK" if qty > min_alert else ("LOW_STOCK" if qty > 0 else "OUT_OF_STOCK")
+            return res
     raise HTTPException(status_code=404, detail=f"No product matched barcode '{barcode}'")
 
 @app.post("/api/items", tags=["2. Product Catalog"])
 def create_item(item: ItemCreate, user: Dict[str, Any] = Depends(require_roles(UserRole.ADMIN, UserRole.STORE_MANAGER))):
-    """Add a new item to master catalogue (Admin/Store Manager)."""
+    """
+    Add a new item to master catalogue (Admin/Store Manager).
+    If opening_stock is provided (> 0), automatically logs initial stock IN movement.
+    """
     existing_items = get_collection_data("items")
     if any(it.get("item_code") == item.item_code for it in existing_items):
         raise HTTPException(status_code=400, detail=f"Item code '{item.item_code}' already exists in catalogue")
@@ -300,6 +378,25 @@ def create_item(item: ItemCreate, user: Dict[str, Any] = Depends(require_roles(U
     new_doc["created_at"] = now
     new_doc["updated_at"] = now
     save_collection_doc("items", new_doc)
+
+    # Automatic initial stock increment if opening_stock is specified
+    if item.opening_stock and item.opening_stock > 0:
+        stock_entry = {
+            "_id": f"STK-IN-OPENING-{item.item_code}",
+            "item_code": item.item_code,
+            "item_name": item.name,
+            "transaction_type": "IN",
+            "movement_type": "IN",
+            "voucher_type": "OPENING_BALANCE",
+            "quantity": item.opening_stock,
+            "voucher_no": f"OPENING-{item.item_code}",
+            "date": datetime.datetime.now().strftime("%Y-%m-%d"),
+            "reason": "Initial Opening Stock on Item Creation",
+            "created_at": now,
+            "updated_at": now
+        }
+        save_collection_doc("stock_ledger", stock_entry)
+
     return {"message": "Item registered successfully", "item": new_doc}
 
 @app.put("/api/items/{item_code}", tags=["2. Product Catalog"])
@@ -1060,6 +1157,245 @@ def print_existing_sales_invoice(invoice_no: str):
         invoice_date=target.get("invoice_date", "2026-08-24"),
         customer_name=customer_name,
         customer_address=f"City: {customer_city}",
+        items=raw_items
+    )
+    return HTMLResponse(content=html)
+
+# ---------------------------------------------------------------------------
+def generate_purchase_invoice_html(invoice_no: str, invoice_date: str, vendor_name: str, vendor_gstin: Optional[str] = None, vendor_address: Optional[str] = None, items: List[Dict[str, Any]] = None) -> str:
+    """
+    Renders commercial printable purchase bill with mandatory columns:
+    Item name | Item description(Optional) | quantity | price | tax | (total=(price+tax)*quantity)
+    """
+    items = items or []
+    rows = ""
+    subtotal = 0.0
+    total_tax = 0.0
+    grand_total = 0.0
+
+    for idx, it in enumerate(items):
+        price = float(it.get("price", it.get("rate", 0.0)))
+        qty = float(it.get("quantity", 1.0))
+        tax_pct = float(it.get("tax_percent", it.get("gst_percent", 5.0)))
+
+        unit_tax = round(price * (tax_pct / 100.0), 2)
+        line_net = round(price * qty, 2)
+        line_tax = round(unit_tax * qty, 2)
+        line_total = round((price + unit_tax) * qty, 2)
+
+        subtotal += line_net
+        total_tax += line_tax
+        grand_total += line_total
+
+        desc_text = it.get("item_description") or "—"
+
+        rows += f"""
+        <tr>
+          <td>{idx + 1}</td>
+          <td><strong>{it.get('item_name', 'Item')}</strong></td>
+          <td><span style="color:#64748b; font-size:12px;">{desc_text}</span></td>
+          <td style="text-align:right">{qty}</td>
+          <td style="text-align:right">Rs {price:,.2f}</td>
+          <td style="text-align:right">{tax_pct}% <small style="color:#64748b;">(Rs {unit_tax:,.2f})</small></td>
+          <td style="text-align:right"><strong>Rs {line_total:,.2f}</strong></td>
+        </tr>"""
+
+    grand_total = round(grand_total, 2)
+    gstin_display = vendor_gstin or "33AAAAA0000A1Z5"
+    addr_line = f"<p style='margin:2px 0; color:#475569;'>{vendor_address}</p>" if vendor_address else "<p style='margin:2px 0; color:#64748b;'>Registered Vendor Address</p>"
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Purchase Invoice - {invoice_no}</title>
+<style>
+  @media print {{
+    @page {{ margin: 12mm; size: A4 portrait; }}
+    body {{ margin: 0; background: #fff !important; color: #000 !important; font-size: 13px; }}
+    .no-print {{ display: none !important; }}
+    .invoice-box {{ box-shadow: none !important; border: none !important; max-width: 100% !important; }}
+  }}
+  body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f8fafc; color: #1e293b; margin: 20px; }}
+  .invoice-box {{ max-width: 920px; margin: 0 auto; background: #fff; padding: 35px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }}
+  .header {{ display: flex; justify-content: space-between; border-bottom: 2px solid #0284c7; padding-bottom: 20px; margin-bottom: 25px; }}
+  .company h1 {{ font-size: 26px; font-weight: 800; color: #0f172a; margin: 0 0 5px 0; }}
+  .company p {{ margin: 2px 0; color: #64748b; font-size: 13px; }}
+  .invoice-badge {{ text-align: right; }}
+  .invoice-badge span {{ display: inline-block; background: #0284c7; color: #fff; padding: 4px 12px; border-radius: 4px; font-weight: 700; font-size: 12px; letter-spacing: 1px; }}
+  .invoice-badge p {{ margin: 4px 0; font-size: 14px; color: #475569; }}
+  .parties {{ display: flex; justify-content: space-between; background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 6px; padding: 15px; margin-bottom: 25px; }}
+  .party-col {{ width: 48%; }}
+  .party-col h4 {{ margin: 0 0 6px 0; color: #475569; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }}
+  table {{ width: 100%; border-collapse: collapse; margin-bottom: 20px; }}
+  th {{ background: #1e293b; color: #fff; padding: 10px 10px; text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; }}
+  th:not(:nth-child(2)):not(:nth-child(3)):not(:first-child) {{ text-align: right; }}
+  td {{ padding: 10px 10px; border-bottom: 1px solid #e2e8f0; font-size: 13px; }}
+  .summary-wrap {{ display: flex; justify-content: flex-end; margin-top: 10px; }}
+  .summary-card {{ width: 380px; background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 6px; padding: 12px 16px; }}
+  .summary-row {{ display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; color: #475569; }}
+  .summary-row.total {{ border-top: 2px solid #0284c7; margin-top: 6px; padding-top: 8px; font-size: 16px; font-weight: 800; color: #0f172a; }}
+  .footer-notes {{ margin-top: 35px; border-top: 1px dashed #cbd5e1; padding-top: 15px; display: flex; justify-content: space-between; font-size: 12px; color: #64748b; }}
+  .actions-bar {{ text-align: center; margin: 20px 0; }}
+  .btn-print {{ background: #0284c7; color: #fff; border: none; padding: 10px 28px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; }}
+  .btn-print:hover {{ background: #0369a1; }}
+</style>
+</head>
+<body>
+  <div class="actions-bar no-print">
+    <button class="btn-print" onclick="window.print()">🖨 Print Purchase Invoice</button>
+  </div>
+
+  <div class="invoice-box">
+    <div class="header">
+      <div class="company">
+        <h1>JOMPOI ONLINE GROCERY</h1>
+        <p>Operational Supermarket & Retail Wholesale ERP System</p>
+        <p>GSTIN: 33AAAAA0000A1Z5 &bull; Central Supermarket Hub, Chennai</p>
+      </div>
+      <div class="invoice-badge">
+        <span>PURCHASE INVOICE / BILL</span>
+        <p><strong>{invoice_no}</strong></p>
+        <p>Date: {invoice_date}</p>
+        <p>Status: VERIFIED &bull; ITC ELIGIBLE</p>
+      </div>
+    </div>
+
+    <div class="parties">
+      <div class="party-col">
+        <h4>Vendor / Supplier</h4>
+        <p><strong>{vendor_name}</strong></p>
+        <p style="margin:2px 0; color:#475569;">GSTIN: {gstin_display}</p>
+        {addr_line}
+      </div>
+      <div class="party-col">
+        <h4>Billed / Received At (Recipient)</h4>
+        <p><strong>Jompoi Central Supermarket Hub</strong></p>
+        <p style="margin:2px 0; color:#475569;">GSTIN: 33AAAAA0000A1Z5</p>
+        <p style="margin:2px 0; color:#475569;">Ambattur Industrial Estate, Chennai, Tamil Nadu</p>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:5%;">#</th>
+          <th style="width:25%;">Item name</th>
+          <th style="width:20%;">Item description(Optional)</th>
+          <th style="width:10%; text-align:right;">quantity</th>
+          <th style="width:12%; text-align:right;">price</th>
+          <th style="width:13%; text-align:right;">tax</th>
+          <th style="width:15%; text-align:right;">(total=(price+tax)*quantity)</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows}
+      </tbody>
+    </table>
+
+    <div class="summary-wrap">
+      <div class="summary-card">
+        <div class="summary-row">
+          <span>Taxable Net Amount:</span>
+          <span>Rs {subtotal:,.2f}</span>
+        </div>
+        <div class="summary-row">
+          <span>Input Tax Credit (GST):</span>
+          <span>Rs {total_tax:,.2f}</span>
+        </div>
+        <div class="summary-row total">
+          <span>Grand Total:</span>
+          <span>Rs {grand_total:,.2f}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-notes">
+      <div>
+        <p><strong>Procurement Verification:</strong> Stock inward received and verified against physical delivery.</p>
+        <p>GST Input Tax Credit booked under Section 16 CGST Act.</p>
+      </div>
+      <div style="text-align:right;">
+        <p>Verified By: <strong>Warehouse Manager</strong></p>
+        <br><br>
+        <p>Authorized Receiver</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>"""
+    return html
+
+@app.post("/api/purchases/print", tags=["4. Supplier & Purchases", "7. Commercial Print Invoice"], response_class=HTMLResponse)
+def print_purchase_invoice_custom(req: PrintPurchaseInvoiceRequest):
+    """
+    Renders commercial printable purchase bill from given JSON payload.
+    Table columns:
+    # | Item name | Item description(Optional) | quantity | price | tax | (total=(price+tax)*quantity)
+    """
+    items_list = [
+        {
+            "item_name": it.item_name,
+            "item_description": it.item_description,
+            "quantity": it.quantity,
+            "price": it.price,
+            "tax_percent": it.tax_percent
+        }
+        for it in req.items
+    ]
+    html_content = generate_purchase_invoice_html(
+        invoice_no=req.invoice_no,
+        invoice_date=req.invoice_date,
+        vendor_name=req.vendor_name,
+        vendor_gstin=req.vendor_gstin,
+        vendor_address=req.vendor_address,
+        items=items_list
+    )
+    return HTMLResponse(content=html_content)
+
+@app.get("/api/purchases/{invoice_no}/print", tags=["4. Supplier & Purchases", "7. Commercial Print Invoice"], response_class=HTMLResponse)
+def print_existing_purchase_invoice(invoice_no: str):
+    """
+    Look up an existing purchase invoice by invoice number and render printable purchase bill.
+    Table columns:
+    # | Item name | Item description(Optional) | quantity | price | tax | (total=(price+tax)*quantity)
+    """
+    invoices = get_collection_data("purchase_invoice")
+    target = None
+    for inv in invoices:
+        if inv.get("invoice_no") == invoice_no or inv.get("_id") == invoice_no:
+            target = inv
+            break
+    if not target:
+        raise HTTPException(status_code=404, detail=f"Purchase invoice '{invoice_no}' not found")
+
+    raw_items = target.get("items", [])
+    if not raw_items:
+        raw_items = [{
+            "item_name": target.get("item_name", "Procured Item"),
+            "item_description": target.get("item_description"),
+            "quantity": target.get("quantity", 1),
+            "price": target.get("rate", target.get("price", 100)),
+            "tax_percent": target.get("gst_percent", 5)
+        }]
+    else:
+        raw_items = [{
+            "item_name": it.get("item_name", it.get("item_code", "Item")),
+            "item_description": it.get("item_description"),
+            "quantity": it.get("quantity", 1),
+            "price": it.get("rate", it.get("price", 100)),
+            "tax_percent": it.get("gst_percent", it.get("tax_percent", 5))
+        } for it in raw_items]
+
+    vendor_name = target.get("vendor", "Vendor")
+    vendor_gstin = target.get("vendor_gstin", "33AAAAA0000A1Z5")
+
+    html = generate_purchase_invoice_html(
+        invoice_no=target.get("invoice_no", invoice_no),
+        invoice_date=target.get("invoice_date", "2026-08-20"),
+        vendor_name=vendor_name,
+        vendor_gstin=vendor_gstin,
+        vendor_address="Registered Supplier Premises",
         items=raw_items
     )
     return HTMLResponse(content=html)

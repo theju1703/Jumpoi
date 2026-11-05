@@ -24,6 +24,7 @@ fun InventoryScreen(
 ) {
     val coroutineScope = rememberCoroutineScope()
     var stockList by remember { mutableStateOf<List<StockPosition>>(emptyList()) }
+    var searchQuery by remember { mutableStateOf("") }
     var isLoading by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
@@ -31,6 +32,12 @@ fun InventoryScreen(
             stockList = ErpApiClient.getStockPosition()
             isLoading = false
         }
+    }
+
+    val filteredList = stockList.filter {
+        searchQuery.isEmpty() ||
+        it.item_code.contains(searchQuery, ignoreCase = true) ||
+        (it.item_name ?: "").contains(searchQuery, ignoreCase = true)
     }
 
     Scaffold(
@@ -70,7 +77,18 @@ fun InventoryScreen(
                 )
             }
 
-            items(stockList) { stock ->
+            item {
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    placeholder = { Text("Search by Item Name or Code (ITM001)...", color = TextSecondary, fontSize = 13.sp) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    shape = RoundedCornerShape(8.dp)
+                )
+            }
+
+            items(filteredList) { stock ->
                 Card(
                     colors = CardDefaults.cardColors(containerColor = BgCard),
                     shape = RoundedCornerShape(10.dp),

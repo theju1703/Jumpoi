@@ -6,6 +6,7 @@ Supermarket ERP Ecosystem: Backend API, Inventory, GST & POS Billing Workflows
 import os
 import pytest
 import datetime
+import time
 from fastapi.testclient import TestClient
 from src.api.main import app
 
@@ -424,3 +425,146 @@ def test_security_nosql_injection_attempt_handling():
         assert resp.status_code == 200
         # Returns empty list or safe literal matches without internal 500 error
         assert isinstance(resp.json(), list)
+
+
+def test_stock_lifecycle_vendor_purchase_increases_and_sales_decreases(auth_headers, cashier_headers):
+    unique_suffix = str(int(time.time()))[-6:]
+    item_code = f"ITM-CYCLE-{unique_suffix}"
+
+    item_payload = {
+        "item_code": item_code,
+        "name": f"Organic Honey {unique_suffix}",
+        "brand": "Nature Best",
+        "category": "Organic",
+        "price": 250.0,
+        "cost_price": 180.0,
+        "gst_percent": 5.0,
+        "min_stock_alert": 10.0,
+        "opening_stock": 25.0
+    }
+    create_resp = client.post("/api/items", json=item_payload, headers=auth_headers)
+    assert create_resp.status_code == 200
+
+    item_get = client.get(f"/api/items/{item_code}")
+    assert item_get.status_code == 200
+    assert item_get.json()["quantity_on_hand"] == 25.0
+    assert item_get.json()["in_stock"] is True
+
+    pur_invoice_no = f"PUR-CYCLE-{unique_suffix}"
+    pur_payload = {
+        "invoice_no": pur_invoice_no,
+        "invoice_date": "2026-11-06",
+        "vendor": "Organic Apiaries Ltd",
+        "vendor_gstin": "33AABCO1234A1Z1",
+        "items": [
+            {
+                "item_code": item_code,
+                "item_name": f"Organic Honey {unique_suffix}",
+                "item_description": "Pure Raw Forest Honey 500g",
+                "quantity": 30.0,
+                "rate": 180.0,
+                "gst_percent": 5.0
+            }
+        ]
+    }
+    pur_resp = client.post("/api/purchases/invoice", json=pur_payload, headers=auth_headers)
+    assert pur_resp.status_code == 200
+
+    item_after_pur = client.get(f"/api/items/{item_code}")
+    assert item_after_pur.status_code == 200
+    assert item_after_pur.json()["quantity_on_hand"] == 55.0
+
+    sale_invoice_no = f"INV-CYCLE-{unique_suffix}"
+    sale_payload = {
+        "invoice_no": sale_invoice_no,
+        "invoice_date": "2026-11-06",
+        "customer_name": "Dr. Ramesh Kumar",
+        "customer_city": "Chennai",
+        "payment_mode": "UPI",
+        "items": [
+            {
+                "item_code": item_code,
+                "quantity": 15.0,
+                "rate": 250.0
+            }
+        ]
+    }
+    sale_resp = client.post("/api/sales/invoice", json=sale_payload, headers=cashier_headers)
+    assert sale_resp.status_code == 200
+
+    item_after_sale = client.get(f"/api/items/{item_code}")
+    assert item_after_sale.status_code == 200
+    assert item_after_sale.json()["quantity_on_hand"] == 40.0
+    assert item_after_sale.json()["stock_status"] == "IN_STOCK"
+
+
+def test_item_code_filter_and_data_analysis():
+    resp_code = client.get("/api/items/ITM001")
+    assert resp_code.status_code == 200
+    data_code = resp_code.json()
+    assert data_code["item_code"] == "ITM001"
+    assert "quantity_on_hand" in data_code
+    assert "in_stock" in data_code
+    assert "stock_status" in data_code
+    assert data_code["name"] == "Basmati Rice 5kg"
+
+    resp_search = client.get("/api/items?search=ITM001")
+    assert resp_search.status_code == 200
+    items_found = resp_search.json()
+    assert len(items_found) >= 1
+    assert any(it["item_code"] == "ITM001" for it in items_found)
+    assert items_found[0]["quantity_on_hand"] >= 0
+
+    resp_oil = client.get("/api/items?search=Sunflower")
+    assert resp_oil.status_code == 200
+    oil_items = resp_oil.json()
+    assert len(oil_items) >= 1
+    assert "Sunflower" in oil_items[0]["name"]
+    assert "quantity_on_hand" in oil_items[0]
+
+
+def test_commercial_purchase_invoice_print():
+    purchase_print_payload = {
+        "invoice_no": "PUR-PRINT-777",
+        "invoice_date": "2026-11-06",
+        "vendor_name": "Agro Fresh Wholesale Ltd",
+        "vendor_gstin": "33AABCA9999Z1Z0",
+        "vendor_address": "12 APMC Market Yard, Koyambedu, Chennai",
+        "items": [
+            {
+                "item_name": "Aged Sona Masoori Rice 25kg",
+                "item_description": "Single polished export grade bag",
+                "quantity": 10.0,
+                "price": 1200.0,
+                "tax_percent": 5.0
+            },
+            {
+                "item_name": "Cold Pressed Gingelly Oil 5L",
+                "item_description": None,
+                "quantity": 4.0,
+                "price": 950.0,
+                "tax_percent": 12.0
+            }
+        ]
+    }
+    resp = client.post("/api/purchases/print", json=purchase_print_payload)
+    assert resp.status_code == 200
+    html = resp.text
+
+    assert "Item name" in html
+    assert "Item description(Optional)" in html
+    assert "quantity" in html
+    assert "price" in html
+    assert "tax" in html
+    assert "(total=(price+tax)*quantity)" in html
+    assert "Aged Sona Masoori Rice 25kg" in html
+    assert "Single polished export grade bag" in html
+    assert "12,600.00" in html
+    assert "Cold Pressed Gingelly Oil 5L" in html
+    assert "4,256.00" in html
+    assert "16,856.00" in html
+
+    get_resp = client.get("/api/purchases/PUR-2026-001/print")
+    assert get_resp.status_code == 200
+    assert "(total=(price+tax)*quantity)" in get_resp.text
+    assert "KR Agro Supplies" in get_resp.text

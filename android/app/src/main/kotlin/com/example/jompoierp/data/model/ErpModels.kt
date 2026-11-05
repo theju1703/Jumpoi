@@ -27,7 +27,30 @@ data class Item(
     val gst_percent: Double = 5.0,
     val min_stock_alert: Double = 10.0,
     val barcode: String? = null,
-    val description: String? = null
+    val description: String? = null,
+    val cost_price: Double? = null,
+    val quantity_on_hand: Double = 0.0,
+    val in_stock: Boolean = true,
+    val stock_status: String = "IN_STOCK"
+)
+
+@Serializable
+data class PrintPurchaseInvoiceItem(
+    val item_name: String,
+    val item_description: String? = null,
+    val quantity: Double,
+    val price: Double,
+    val tax_percent: Double = 5.0
+)
+
+@Serializable
+data class PrintPurchaseInvoiceRequest(
+    val invoice_no: String,
+    val invoice_date: String,
+    val vendor_name: String,
+    val vendor_gstin: String? = null,
+    val vendor_address: String? = null,
+    val items: List<PrintPurchaseInvoiceItem>
 )
 
 @Serializable
