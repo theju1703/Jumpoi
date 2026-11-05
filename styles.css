@@ -51,35 +51,12 @@ body { font-family: var(--font-family); background-color: var(--bg-primary); col
 .btn-primary:hover { background-color: var(--accent-blue-hover); }
 .btn-secondary { background-color: var(--border-color); color: var(--text-primary); }
 .btn-secondary:hover { background-color: #475569; }
+.btn-success { background-color: var(--accent-emerald); color: #fff; }
+.btn-success:hover { background-color: #059669; }
 
 /* Tabs */
 .tab-pane { display: none; }
 .tab-pane.active { display: block; }
-
-/* Blueprint Flow Diagram */
-.blueprint-container { background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 2rem; margin-bottom: 2rem; }
-.blueprint-intro { margin-bottom: 2rem; text-align: center; }
-.blueprint-intro h3 { font-size: 1.35rem; font-weight: 700; margin-bottom: 0.5rem; color: #fff; }
-.blueprint-intro p { color: var(--text-secondary); font-size: 0.95rem; max-width: 900px; margin: 0 auto; line-height: 1.5; }
-
-.architecture-grid { display: flex; align-items: stretch; justify-content: space-between; gap: 0.75rem; flex-wrap: wrap; }
-.arch-card { flex: 1; min-width: 220px; background-color: #0f172a; border-radius: 10px; padding: 1.25rem; border: 1px solid var(--border-color); display: flex; flex-direction: column; }
-.arch-card-blue { border-top: 4px solid var(--accent-blue); }
-.arch-card-amber { border-top: 4px solid var(--accent-amber); }
-.arch-card-purple { border-top: 4px solid var(--accent-purple); }
-.arch-card-emerald { border-top: 4px solid var(--accent-emerald); }
-
-.arch-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; }
-.arch-step { font-size: 0.7rem; font-weight: 700; text-transform: uppercase; background: rgba(255, 255, 255, 0.1); padding: 0.15rem 0.4rem; border-radius: 4px; }
-.arch-header h4 { font-size: 1rem; font-weight: 700; }
-.arch-sub { font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 0.85rem; }
-.arch-content { flex: 1; font-size: 0.8rem; line-height: 1.5; margin-bottom: 1rem; color: #cbd5e1; }
-.arch-content strong { display: block; margin-top: 0.5rem; color: #fff; font-size: 0.82rem; }
-.arch-content ul { margin-left: 1.2rem; margin-bottom: 0.4rem; }
-.arch-footer { border-top: 1px solid var(--border-color); padding-top: 0.75rem; }
-
-.arch-arrow { display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--accent-blue); font-size: 1.25rem; min-width: 70px; text-align: center; }
-.arch-arrow span { font-size: 0.7rem; font-weight: 600; color: var(--text-secondary); margin-top: 0.35rem; }
 
 /* KPI Grid */
 .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 1.25rem; margin-bottom: 2rem; }
@@ -98,7 +75,7 @@ body { font-family: var(--font-family); background-color: var(--bg-primary); col
 
 /* Tables */
 .table-container { background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; margin-bottom: 2rem; overflow-x: auto; }
-.table-header { margin-bottom: 1.25rem; }
+.table-header { margin-bottom: 1.25rem; display: flex; justify-content: space-between; align-items: center; }
 .table-header h3 { font-size: 1.05rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
 .data-table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
 .data-table th, .data-table td { padding: 0.85rem 1rem; text-align: left; border-bottom: 1px solid var(--border-color); }
@@ -125,8 +102,45 @@ body { font-family: var(--font-family); background-color: var(--bg-primary); col
 .pnl-row.highlight { background-color: rgba(59, 130, 246, 0.1); color: var(--accent-blue); font-size: 0.98rem; border-radius: 6px; }
 .pnl-row.super-highlight { background-color: rgba(16, 185, 129, 0.15); color: var(--accent-emerald); font-size: 1.15rem; font-weight: 700; border-radius: 6px; margin-top: 0.75rem; border: 1px solid var(--accent-emerald); }
 
-/* Charts */
-.charts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
-.chart-container { background-color: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; min-height: 320px; }
-.chart-header { margin-bottom: 1.25rem; }
-.chart-header h3 { font-size: 1rem; font-weight: 600; display: flex; align-items: center; gap: 0.5rem; }
+/* Invoice Component Styles */
+.invoice-card { background: #ffffff; color: #1e293b; border-radius: 12px; padding: 2.5rem; max-width: 950px; margin: 0 auto 2rem auto; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+.invoice-header-row { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0f172a; padding-bottom: 1.5rem; margin-bottom: 1.75rem; }
+.invoice-company h2 { font-size: 1.75rem; font-weight: 800; color: #0f172a; letter-spacing: -0.5px; }
+.invoice-company p { color: #64748b; font-size: 0.875rem; margin-top: 0.2rem; }
+.invoice-meta-box { text-align: right; }
+.invoice-badge-title { display: inline-block; background: #0f172a; color: #fff; padding: 0.25rem 0.75rem; border-radius: 4px; font-size: 0.85rem; font-weight: 700; margin-bottom: 0.5rem; }
+.invoice-meta-box p { font-size: 0.875rem; color: #475569; margin: 0.15rem 0; }
+
+.invoice-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 1.75rem; padding: 1rem; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; }
+.party-box h4 { font-size: 0.75rem; text-transform: uppercase; color: #64748b; letter-spacing: 0.05em; margin-bottom: 0.4rem; }
+.party-box p { font-size: 0.95rem; color: #1e293b; margin: 0.15rem 0; }
+
+.invoice-table { width: 100%; border-collapse: collapse; margin-bottom: 1.5rem; }
+.invoice-table th { background-color: #0f172a; color: #ffffff; padding: 0.75rem 1rem; text-align: left; font-size: 0.82rem; text-transform: uppercase; letter-spacing: 0.04em; }
+.invoice-table th.num, .invoice-table td.num { text-align: right; }
+.invoice-table td { padding: 0.85rem 1rem; border-bottom: 1px solid #e2e8f0; font-size: 0.9rem; color: #1e293b; }
+.invoice-table tbody tr:hover { background-color: #f8fafc; }
+.desc-text { display: block; font-size: 0.78rem; color: #64748b; margin-top: 0.2rem; font-style: italic; }
+.formula-tag { display: inline-block; font-size: 0.7rem; background: #e0e7ff; color: #3730a3; padding: 0.1rem 0.4rem; border-radius: 3px; margin-left: 0.35rem; }
+
+.invoice-summary-grid { display: flex; justify-content: flex-end; margin-top: 1rem; }
+.invoice-summary-box { width: 340px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 1rem; }
+.summary-line { display: flex; justify-content: space-between; padding: 0.4rem 0; font-size: 0.9rem; color: #475569; }
+.summary-line.grand { border-top: 2px solid #0f172a; margin-top: 0.5rem; padding-top: 0.6rem; font-size: 1.15rem; font-weight: 800; color: #0f172a; }
+
+.invoice-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; max-width: 950px; margin-left: auto; margin-right: auto; }
+.item-form-box { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.5rem; max-width: 950px; margin: 0 auto 2rem auto; }
+.form-grid { display: grid; grid-template-columns: 2fr 2fr 1fr 1fr 1fr auto; gap: 0.75rem; align-items: end; }
+.form-group label { display: block; font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 0.35rem; font-weight: 600; text-transform: uppercase; }
+.form-group input, .form-group select { width: 100%; padding: 0.6rem 0.75rem; border-radius: 6px; border: 1px solid var(--border-color); background: #0f172a; color: #fff; font-size: 0.88rem; }
+.form-group input:focus { outline: none; border-color: var(--accent-blue); }
+
+/* Print Media Query */
+@media print {
+  body { background: #fff !important; color: #000 !important; }
+  .sidebar, .top-header, .invoice-controls, .item-form-box, .header-actions, .nav-menu, .sidebar-footer { display: none !important; }
+  .main-content { padding: 0 !important; margin: 0 !important; }
+  .tab-pane { display: none !important; }
+  #tab-invoice { display: block !important; }
+  .invoice-card { box-shadow: none !important; border: none !important; padding: 0 !important; margin: 0 !important; max-width: 100% !important; }
+}

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Jompoi Enterprise ERP & Data Pipeline</title>
+  <title>Jompoi ERP - Business Management System</title>
   <link rel="stylesheet" href="styles.css" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
@@ -13,7 +13,7 @@
     <!-- Sidebar Navigation -->
     <aside class="sidebar">
       <div class="brand">
-        <div class="brand-icon"><i class="fa-solid fa-layer-group"></i></div>
+        <div class="brand-icon"><i class="fa-solid fa-boxes-packing"></i></div>
         <div class="brand-text">
           <h2>Jompoi ERP</h2>
           <span>Business System</span>
@@ -21,8 +21,8 @@
       </div>
 
       <nav class="nav-menu">
-        <button class="nav-item active" data-tab="tab-blueprint">
-          <i class="fa-solid fa-diagram-project"></i> Architecture Blueprint
+        <button class="nav-item active" data-tab="tab-invoice">
+          <i class="fa-solid fa-print"></i> Print Invoice
         </button>
         <button class="nav-item" data-tab="tab-erp-pnl">
           <i class="fa-solid fa-file-invoice-dollar"></i> Profit & Loss (ERP)
@@ -30,32 +30,26 @@
         <button class="nav-item" data-tab="tab-gst-itc">
           <i class="fa-solid fa-building-columns"></i> GST & ITC Report
         </button>
-        <button class="nav-item" data-tab="tab-executive">
-          <i class="fa-solid fa-chart-pie"></i> Executive Analytics
-        </button>
-        <button class="nav-item" data-tab="tab-items">
-          <i class="fa-solid fa-box-open"></i> Master Items Catalog
-        </button>
         <button class="nav-item" data-tab="tab-sales">
           <i class="fa-solid fa-cart-shopping"></i> Sales Invoices
         </button>
         <button class="nav-item" data-tab="tab-purchases">
           <i class="fa-solid fa-truck"></i> Purchase Invoices
         </button>
+        <button class="nav-item" data-tab="tab-items">
+          <i class="fa-solid fa-box-open"></i> Master Items Catalog
+        </button>
         <button class="nav-item" data-tab="tab-inventory">
           <i class="fa-solid fa-boxes-stacked"></i> Stock Ledger
-        </button>
-        <button class="nav-item" data-tab="tab-etl">
-          <i class="fa-solid fa-cloud-arrow-up"></i> Google Cloud Sync
         </button>
       </nav>
 
       <div class="sidebar-footer">
         <div class="pipeline-badge">
           <span class="status-indicator pulse"></span>
-          <span>ERP System: Connected</span>
+          <span>ERP System: Active</span>
         </div>
-        <small>GCP Project: <code>project-b6567b21</code></small>
+        <small>System Version: <code>v1.2.0-prod</code></small>
       </div>
     </aside>
 
@@ -64,12 +58,12 @@
       <!-- Top Header -->
       <header class="top-header">
         <div class="header-title">
-          <h1 id="page-title">Architecture Blueprint Flow</h1>
-          <p id="page-subtitle">End-to-End Enterprise Architecture: Operational Backend &rarr; Google Cloud &rarr; ERPNext &rarr; GST APIs &rarr; P&L</p>
+          <h1 id="page-title">Tax Invoice & Billing</h1>
+          <p id="page-subtitle">Generate, review, and print official commercial invoices with per-item GST calculations</p>
         </div>
         <div class="header-actions">
-          <button id="btn-sync" class="btn btn-primary">
-            <i class="fa-solid fa-rotate"></i> Run Cloud Sync
+          <button id="btn-print-top" class="btn btn-primary" onclick="window.print()">
+            <i class="fa-solid fa-print"></i> Print Invoice
           </button>
           <a href="docs.html" target="_blank" class="btn btn-secondary">
             <i class="fa-solid fa-book"></i> REST API Docs
@@ -77,130 +71,140 @@
         </div>
       </header>
 
-      <!-- TAB 1: ARCHITECTURE BLUEPRINT (Interactive flow from WhatsApp Diagram) -->
-      <section id="tab-blueprint" class="tab-pane active">
-        <div class="blueprint-container">
-          <div class="blueprint-intro">
-            <h3><i class="fa-solid fa-sitemap"></i> Client Architecture Specification (Flow Summary)</h3>
-            <p>Jompoi Backend (Operational) &rarr; Daily Sync to Google Cloud &rarr; ERPNext Regularly Updates Tables &rarr; ERPNext Calls GST APIs for Input Tax Credit &rarr; ERPNext Generates Reports (P&L, GST)</p>
+      <!-- TAB 1: PRINT INVOICE (Default View) -->
+      <section id="tab-invoice" class="tab-pane active">
+        <!-- Controls bar -->
+        <div class="invoice-controls">
+          <div>
+            <label style="font-size:0.8rem; color:var(--text-secondary); text-transform:uppercase; font-weight:600; margin-right:0.5rem;">Select Invoice:</label>
+            <select id="invoice-selector" style="padding:0.5rem 0.75rem; border-radius:6px; background:#1e293b; color:#fff; border:1px solid #334155;">
+              <option value="INV-2026-001">INV-2026-001 (ABC Stores)</option>
+              <option value="INV-2026-002">INV-2026-002 (Sri Murugan Supermarket)</option>
+              <option value="INV-2026-003">INV-2026-003 (Kovai Fresh Mart)</option>
+            </select>
+          </div>
+          <div>
+            <button class="btn btn-success" onclick="window.print()">
+              <i class="fa-solid fa-print"></i> Print Invoice
+            </button>
+          </div>
+        </div>
+
+        <!-- Printable Invoice Sheet -->
+        <div class="invoice-card" id="invoice-sheet">
+          <div class="invoice-header-row">
+            <div class="invoice-company">
+              <h2>JOMPOI ONLINE GROCERY</h2>
+              <p>Operational Wholesale & Retail ERP System</p>
+              <p style="font-size:0.8rem; color:#64748b;">GSTIN: 33AAAAA0000A1Z5 &bull; Chennai, Tamil Nadu</p>
+            </div>
+            <div class="invoice-meta-box">
+              <span class="invoice-badge-title">TAX INVOICE</span>
+              <p><strong>Invoice No:</strong> <span id="inv-no">INV-2026-001</span></p>
+              <p><strong>Date:</strong> <span id="inv-date">2026-08-24</span></p>
+              <p><strong>Place of Supply:</strong> <span id="inv-pos">Tamil Nadu (33)</span></p>
+            </div>
           </div>
 
-          <div class="architecture-grid">
-            <!-- Block 1 -->
-            <div class="arch-card arch-card-blue">
-              <div class="arch-header">
-                <span class="arch-step">Step 1</span>
-                <h4>Jompoi Backend (Operational)</h4>
+          <div class="invoice-parties">
+            <div class="party-box">
+              <h4>Billed To (Customer)</h4>
+              <p><strong id="inv-customer-name">ABC Stores</strong></p>
+              <p id="inv-customer-city">City: Chennai, Tamil Nadu</p>
+              <p id="inv-customer-phone">Phone: +91 9876543210</p>
+            </div>
+            <div class="party-box">
+              <h4>Dispatched From (Warehouse)</h4>
+              <p><strong>Jompoi Central Fulfillment Hub</strong></p>
+              <p>Ambattur Industrial Estate, Chennai</p>
+              <p>State Code: 33 (Tamil Nadu)</p>
+            </div>
+          </div>
+
+          <!-- THE REQUIRED INVOICE TABLE -->
+          <table class="invoice-table">
+            <thead>
+              <tr>
+                <th style="width:5%;">#</th>
+                <th style="width:30%;">Item Name</th>
+                <th style="width:25%;">Item Description (Optional)</th>
+                <th class="num" style="width:10%;">Quantity</th>
+                <th class="num" style="width:12%;">Price (₹)</th>
+                <th class="num" style="width:18%;">Tax (GST)</th>
+                <th class="num" style="width:20%;">Total (₹)<span class="formula-tag">(Price + Tax) × Qty</span></th>
+              </tr>
+            </thead>
+            <tbody id="invoice-items-body">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+
+          <div class="invoice-summary-grid">
+            <div class="invoice-summary-box">
+              <div class="summary-line">
+                <span>Subtotal (Net Price):</span>
+                <span id="inv-subtotal">₹4,500.00</span>
               </div>
-              <p class="arch-sub">Operational MongoDB Database</p>
-              <div class="arch-content">
-                <strong>Master Data Tables:</strong>
-                <ul>
-                  <li>Item List (Name, Brand, Category, GST %, Price)</li>
-                  <li>Customer Master (Name, City, Phone)</li>
-                </ul>
-                <strong>Transaction Tables:</strong>
-                <ul>
-                  <li>Sales Invoices (Items, Qty, Rate, GST)</li>
-                  <li>Purchase Invoices (Vendor, Items, Qty, Rate)</li>
-                  <li>Stock Ledger (IN/OUT Audit Ledger)</li>
-                </ul>
+              <div class="summary-line">
+                <span>Total Tax (GST):</span>
+                <span id="inv-totaltax">₹225.00</span>
               </div>
-              <div class="arch-footer">
-                <span class="badge badge-success">3 Sales | 2 Purchases</span>
+              <div class="summary-line grand">
+                <span>Grand Total:</span>
+                <span id="inv-grandtotal">₹4,725.00</span>
               </div>
             </div>
+          </div>
 
-            <!-- Arrow 1 -->
-            <div class="arch-arrow">
-              <i class="fa-solid fa-arrow-right"></i>
-              <span>2. Daily Sync</span>
+          <div style="margin-top:2rem; padding-top:1rem; border-top:1px dashed #cbd5e1; display:flex; justify-content:space-between; font-size:0.8rem; color:#64748b;">
+            <div>
+              <p><strong>Terms:</strong> Payment due within 15 days of invoice date.</p>
+              <p>This is a computer-generated tax invoice verified under GST ITC regulations.</p>
             </div>
-
-            <!-- Block 2 -->
-            <div class="arch-card arch-card-amber">
-              <div class="arch-header">
-                <span class="arch-step">Step 2</span>
-                <h4>Google Cloud</h4>
-              </div>
-              <p class="arch-sub">BigQuery Cloud Database</p>
-              <div class="arch-content">
-                <strong>Cloud Database (All Tables):</strong>
-                <ul>
-                  <li><code>items</code> Table (with GST %, Brand)</li>
-                  <li><code>sales</code> Invoice Table (Flattened)</li>
-                  <li><code>purchases</code> Table (Flattened)</li>
-                  <li><code>stock_ledger</code> Movement Table</li>
-                  <li>Partitioned & Clustered for Looker Studio</li>
-                </ul>
-              </div>
-              <div class="arch-footer">
-                <span class="badge badge-bq">BigQuery: jompoi_reporting</span>
-              </div>
+            <div style="text-align:right;">
+              <p>For <strong>Jompoi Online Grocery</strong></p>
+              <br /><br />
+              <p>Authorized Signatory</p>
             </div>
+          </div>
+        </div>
 
-            <!-- Arrow 2 -->
-            <div class="arch-arrow">
-              <i class="fa-solid fa-arrow-right"></i>
-              <span>3. Regular Sync</span>
+        <!-- Add New Item Form -->
+        <div class="item-form-box">
+          <h4 style="font-size:0.95rem; margin-bottom:1rem; color:#fff; display:flex; align-items:center; gap:0.5rem;">
+            <i class="fa-solid fa-plus-circle" style="color:var(--accent-emerald);"></i> Add Item to Invoice Table
+          </h4>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Item Name *</label>
+              <input type="text" id="new-item-name" placeholder="e.g. Sona Masoori Rice" />
             </div>
-
-            <!-- Block 3 -->
-            <div class="arch-card arch-card-purple">
-              <div class="arch-header">
-                <span class="arch-step">Step 3 & 4</span>
-                <h4>ERPNext (Business System)</h4>
-              </div>
-              <p class="arch-sub">Enterprise Management Hub</p>
-              <div class="arch-content">
-                <strong>ERPNext Updated Tables:</strong>
-                <ul>
-                  <li>Item Master Table (Updated)</li>
-                  <li>Sales Invoice Table (Updated)</li>
-                  <li>Purchase Invoice Table (Updated)</li>
-                </ul>
-                <strong>GST API Integration:</strong>
-                <ul>
-                  <li>Calls GST Service APIs for Input Tax Credit</li>
-                  <li>Verifies GSTR-2B Eligibility & Reversals</li>
-                </ul>
-              </div>
-              <div class="arch-footer">
-                <span class="badge badge-success">Tables Synced</span>
-              </div>
+            <div class="form-group">
+              <label>Item Description (Optional)</label>
+              <input type="text" id="new-item-desc" placeholder="e.g. 5kg Premium Bag" />
             </div>
-
-            <!-- Arrow 3 -->
-            <div class="arch-arrow">
-              <i class="fa-solid fa-arrow-right"></i>
-              <span>5. Reports</span>
+            <div class="form-group">
+              <label>Quantity *</label>
+              <input type="number" id="new-item-qty" value="1" min="1" step="1" />
             </div>
-
-            <!-- Block 4 -->
-            <div class="arch-card arch-card-emerald">
-              <div class="arch-header">
-                <span class="arch-step">Step 5</span>
-                <h4>Reports & Outputs</h4>
-              </div>
-              <p class="arch-sub">Generated by ERPNext</p>
-              <div class="arch-content">
-                <strong>Profit & Loss Statement:</strong>
-                <ul>
-                  <li>Revenue: ₹12,675.00</li>
-                  <li>Cost of Goods Sold: ₹6,550.00</li>
-                  <li>Gross Profit: ₹6,125.00 (48.3%)</li>
-                  <li>Net Profit: ₹5,275.00</li>
-                </ul>
-                <strong>GST Payment Report:</strong>
-                <ul>
-                  <li>Output Tax: ₹393.75</li>
-                  <li>ITC Input Tax: ₹1,500.00</li>
-                  <li>Net Cash Liability: ₹0.00</li>
-                </ul>
-              </div>
-              <div class="arch-footer">
-                <span class="badge badge-success">Audited & Verified</span>
-              </div>
+            <div class="form-group">
+              <label>Price (₹) *</label>
+              <input type="number" id="new-item-price" value="100.00" min="0" step="0.5" />
+            </div>
+            <div class="form-group">
+              <label>Tax % *</label>
+              <select id="new-item-tax">
+                <option value="0">0%</option>
+                <option value="5" selected>5%</option>
+                <option value="12">12%</option>
+                <option value="18">18%</option>
+                <option value="28">28%</option>
+              </select>
+            </div>
+            <div>
+              <button class="btn btn-primary" id="btn-add-line-item">
+                <i class="fa-solid fa-plus"></i> Add Line
+              </button>
             </div>
           </div>
         </div>
@@ -210,8 +214,8 @@
       <section id="tab-erp-pnl" class="tab-pane">
         <div class="pnl-container">
           <div class="pnl-header">
-            <h2><i class="fa-solid fa-file-invoice-dollar"></i> ERPNext Profit & Loss Statement</h2>
-            <p>Generated by ERPNext Business System from Synced Cloud Database | Period: August 2026</p>
+            <h2><i class="fa-solid fa-file-invoice-dollar"></i> ERP Profit & Loss Statement</h2>
+            <p>Generated by ERP Financial Engine | Operational Accounting Report</p>
             <div class="pnl-actions">
               <button class="btn btn-secondary" onclick="window.print()"><i class="fa-solid fa-print"></i> Print Statement</button>
             </div>
@@ -322,7 +326,8 @@
 
         <div class="table-container">
           <div class="table-header">
-            <h3><i class="fa-solid fa-file-circle-check"></i> GST Government APIs - Input Tax Credit (ITC) Details (Box 4 of Blueprint)</h3>
+            <h3><i class="fa-solid fa-file-circle-check"></i> Government Tax Credit (ITC) Reconciliation Table</h3>
+            <button class="btn btn-secondary" onclick="window.print()"><i class="fa-solid fa-print"></i> Print Tax Report</button>
           </div>
           <table class="data-table">
             <thead>
@@ -365,52 +370,11 @@
         </div>
       </section>
 
-      <!-- TAB 4: EXECUTIVE ANALYTICS -->
-      <section id="tab-executive" class="tab-pane">
-        <div class="charts-grid">
-          <div class="chart-container">
-            <div class="chart-header">
-              <h3><i class="fa-solid fa-chart-column"></i> Daily Sales vs Procurement Trends</h3>
-            </div>
-            <canvas id="chartDailyTrends"></canvas>
-          </div>
-          <div class="chart-container">
-            <div class="chart-header">
-              <h3><i class="fa-solid fa-pie-chart"></i> Sales by Grocery Category</h3>
-            </div>
-            <canvas id="chartCategoryShare"></canvas>
-          </div>
-        </div>
-      </section>
-
-      <!-- TAB 5: MASTER ITEMS -->
-      <section id="tab-items" class="tab-pane">
-        <div class="table-container">
-          <div class="table-header">
-            <h3><i class="fa-solid fa-list"></i> Master Item List (with GST %, Brand, Category, Price)</h3>
-          </div>
-          <table class="data-table" id="table-items-master">
-            <thead>
-              <tr>
-                <th>Item Code</th>
-                <th>Item Name</th>
-                <th>Brand</th>
-                <th>Category</th>
-                <th>Price (INR)</th>
-                <th>GST Rate</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody></tbody>
-          </table>
-        </div>
-      </section>
-
-      <!-- TAB 6: SALES INVOICES -->
+      <!-- TAB 4: SALES INVOICES -->
       <section id="tab-sales" class="tab-pane">
         <div class="table-container">
           <div class="table-header">
-            <h3><i class="fa-solid fa-file-invoice"></i> Sales Invoices (Operational &rarr; Cloud Synced)</h3>
+            <h3><i class="fa-solid fa-cart-shopping"></i> Customer Sales Invoices Register</h3>
           </div>
           <table class="data-table" id="table-sales">
             <thead>
@@ -432,11 +396,11 @@
         </div>
       </section>
 
-      <!-- TAB 7: PURCHASE INVOICES -->
+      <!-- TAB 5: PURCHASE INVOICES (WITH PER-ITEM GST) -->
       <section id="tab-purchases" class="tab-pane">
         <div class="table-container">
           <div class="table-header">
-            <h3><i class="fa-solid fa-truck-ramp-box"></i> Purchase Invoices (Procurement Bills)</h3>
+            <h3><i class="fa-solid fa-truck"></i> Vendor Purchase Invoices (Input Tax Credit Sourced)</h3>
           </div>
           <table class="data-table" id="table-purchases">
             <thead>
@@ -449,7 +413,8 @@
                 <th>Qty</th>
                 <th>Rate</th>
                 <th>Net Amount</th>
-                <th>Input GST</th>
+                <th>Input GST Rate</th>
+                <th>Input Tax Credit</th>
                 <th>Gross Total</th>
               </tr>
             </thead>
@@ -458,21 +423,22 @@
         </div>
       </section>
 
-      <!-- TAB 8: STOCK LEDGER -->
-      <section id="tab-inventory" class="tab-pane">
+      <!-- TAB 6: MASTER ITEMS -->
+      <section id="tab-items" class="tab-pane">
         <div class="table-container">
           <div class="table-header">
-            <h3><i class="fa-solid fa-boxes-stacked"></i> Live Stock Ledger Audit</h3>
+            <h3><i class="fa-solid fa-box-open"></i> Master Items Catalog & Tax Rates</h3>
           </div>
-          <table class="data-table" id="table-stock-ledger">
+          <table class="data-table" id="table-items-master">
             <thead>
               <tr>
-                <th>Date</th>
                 <th>Item Code</th>
                 <th>Item Name</th>
-                <th>Transaction</th>
-                <th>Quantity</th>
-                <th>Voucher No</th>
+                <th>Brand</th>
+                <th>Category</th>
+                <th>Price (INR)</th>
+                <th>GST Rate</th>
+                <th>Status</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -480,20 +446,21 @@
         </div>
       </section>
 
-      <!-- TAB 9: GOOGLE CLOUD SYNC -->
-      <section id="tab-etl" class="tab-pane">
+      <!-- TAB 7: STOCK LEDGER -->
+      <section id="tab-inventory" class="tab-pane">
         <div class="table-container">
           <div class="table-header">
-            <h3><i class="fa-solid fa-cloud"></i> Google Cloud BigQuery Table Sync Tracker</h3>
+            <h3><i class="fa-solid fa-boxes-stacked"></i> Live Inventory Movement Ledger</h3>
           </div>
-          <table class="data-table" id="table-sync-state">
+          <table class="data-table" id="table-stock-ledger">
             <thead>
               <tr>
-                <th>Source Collection</th>
-                <th>Cloud BigQuery Table</th>
-                <th>Sync Mode</th>
-                <th>Last Synced Timestamp</th>
-                <th>Cloud DB Status</th>
+                <th>Date</th>
+                <th>Item Code</th>
+                <th>Item Name</th>
+                <th>Movement</th>
+                <th>Quantity</th>
+                <th>Voucher Reference</th>
               </tr>
             </thead>
             <tbody></tbody>
