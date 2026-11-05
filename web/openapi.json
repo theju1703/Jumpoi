@@ -1,59 +1,69 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "Jompoi Online Grocery Operational Backend & Analytics API",
-    "description": "Operational Backend API for Jompoi Grocery, BigQuery ETL Sync, GST ITC Engine, and ERPNext Analytics",
-    "version": "1.0.0"
+    "title": "Jompoi Supermarket ERP - Enterprise Backend API",
+    "description": "Production-Grade Supermarket ERP API: POS Billing, Multi-Item GST Invoicing, Stock Ledger, GSTR-2B ITC Reconciliation, ERPNext Financial P&L, and BigQuery Cloud DW Sync",
+    "version": "2.0.0"
   },
   "paths": {
-    "/api/health": {
-      "get": {
-        "tags": [
-          "System"
-        ],
-        "summary": "Health Check",
-        "operationId": "health_check_api_health_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/items": {
-      "get": {
-        "tags": [
-          "Catalog"
-        ],
-        "summary": "List Items",
-        "operationId": "list_items_api_items_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      },
+    "/api/auth/register": {
       "post": {
         "tags": [
-          "Catalog"
+          "1. Authentication & Users"
         ],
-        "summary": "Create Item",
-        "operationId": "create_item_api_items_post",
+        "summary": "Register User",
+        "description": "Register a new ERP user (Admin only).",
+        "operationId": "register_user_api_auth_register_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ItemCreate"
+                "$ref": "#/components/schemas/UserRegister"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": [
+          "1. Authentication & Users"
+        ],
+        "summary": "Login",
+        "description": "Authenticate with username & password, returns JWT bearer token.",
+        "operationId": "login_api_auth_login_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserLogin"
               }
             }
           },
@@ -81,12 +91,494 @@
         }
       }
     },
+    "/api/auth/me": {
+      "get": {
+        "tags": [
+          "1. Authentication & Users"
+        ],
+        "summary": "Get Current User Profile",
+        "description": "Retrieve profile of the currently authenticated user.",
+        "operationId": "get_current_user_profile_api_auth_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/items": {
+      "get": {
+        "tags": [
+          "2. Product Catalog"
+        ],
+        "summary": "List Items",
+        "description": "List all products in catalog with optional category and search filters.",
+        "operationId": "list_items_api_items_get",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "2. Product Catalog"
+        ],
+        "summary": "Create Item",
+        "description": "Add a new item to master catalogue (Admin/Store Manager).",
+        "operationId": "create_item_api_items_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/{item_code}": {
+      "get": {
+        "tags": [
+          "2. Product Catalog"
+        ],
+        "summary": "Get Item",
+        "description": "Retrieve item details by item_code.",
+        "operationId": "get_item_api_items__item_code__get",
+        "parameters": [
+          {
+            "name": "item_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "2. Product Catalog"
+        ],
+        "summary": "Update Item",
+        "description": "Update item pricing, description, or GST rate.",
+        "operationId": "update_item_api_items__item_code__put",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "item_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Item Code"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/items/barcode/{barcode}": {
+      "get": {
+        "tags": [
+          "2. Product Catalog"
+        ],
+        "summary": "Get Item By Barcode",
+        "description": "Barcode lookup for POS scanning terminals.",
+        "operationId": "get_item_by_barcode_api_items_barcode__barcode__get",
+        "parameters": [
+          {
+            "name": "barcode",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Barcode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stock": {
+      "get": {
+        "tags": [
+          "3. Inventory Management"
+        ],
+        "summary": "Get Stock Position",
+        "description": "Retrieve real-time stock position (quantity on hand & valuation) aggregated across all ledger movements.",
+        "operationId": "get_stock_position_api_stock_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stock/low-stock": {
+      "get": {
+        "tags": [
+          "3. Inventory Management"
+        ],
+        "summary": "Get Low Stock Alerts",
+        "description": "List items that have reached or dropped below their minimum safety stock alert threshold.",
+        "operationId": "get_low_stock_alerts_api_stock_low_stock_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stock/adjust": {
+      "post": {
+        "tags": [
+          "3. Inventory Management"
+        ],
+        "summary": "Adjust Stock",
+        "description": "Audit stock adjustments (damage, physical audit counts, expiry writes).",
+        "operationId": "adjust_stock_api_stock_adjust_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StockAdjustment"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/vendors": {
+      "get": {
+        "tags": [
+          "4. Supplier & Purchases"
+        ],
+        "summary": "List Vendors",
+        "description": "List registered suppliers and vendors.",
+        "operationId": "list_vendors_api_vendors_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "4. Supplier & Purchases"
+        ],
+        "summary": "Create Vendor",
+        "description": "Register a new vendor with GSTIN and address details.",
+        "operationId": "create_vendor_api_vendors_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VendorCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/purchases": {
+      "get": {
+        "tags": [
+          "4. Supplier & Purchases"
+        ],
+        "summary": "List Purchases",
+        "description": "List all vendor purchase invoices (with per-item GST and Input Tax Credit details).",
+        "operationId": "list_purchases_api_purchases_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/purchases/invoice": {
+      "post": {
+        "tags": [
+          "4. Supplier & Purchases"
+        ],
+        "summary": "Create Purchase Invoice",
+        "description": "Record vendor procurement bill.\nSupports multiple items with differing per-item GST rates.\nAutomatically generates stock IN movements and books Input Tax Credit (ITC).",
+        "operationId": "create_purchase_invoice_api_purchases_invoice_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PurchaseInvoiceCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/customers": {
       "get": {
         "tags": [
-          "Customers"
+          "5. Customers"
         ],
         "summary": "List Customers",
+        "description": "List all registered customers.",
         "operationId": "list_customers_api_customers_get",
         "responses": {
           "200": {
@@ -101,9 +593,10 @@
       },
       "post": {
         "tags": [
-          "Customers"
+          "5. Customers"
         ],
         "summary": "Create Customer",
+        "description": "Register customer for CRM & POS billing.",
         "operationId": "create_customer_api_customers_post",
         "requestBody": {
           "content": {
@@ -137,12 +630,54 @@
         }
       }
     },
+    "/api/customers/search": {
+      "get": {
+        "tags": [
+          "5. Customers"
+        ],
+        "summary": "Search Customer By Phone",
+        "description": "Look up customer by mobile phone at POS counter.",
+        "operationId": "search_customer_by_phone_api_customers_search_get",
+        "parameters": [
+          {
+            "name": "phone",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Phone"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/sales": {
       "get": {
         "tags": [
-          "Sales"
+          "6. Sales & POS Billing"
         ],
         "summary": "List Sales",
+        "description": "List sales invoices.",
         "operationId": "list_sales_api_sales_get",
         "responses": {
           "200": {
@@ -156,12 +691,54 @@
         }
       }
     },
+    "/api/sales/{invoice_no}": {
+      "get": {
+        "tags": [
+          "6. Sales & POS Billing"
+        ],
+        "summary": "Get Sales Invoice",
+        "description": "Get single sales invoice by invoice_no.",
+        "operationId": "get_sales_invoice_api_sales__invoice_no__get",
+        "parameters": [
+          {
+            "name": "invoice_no",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Invoice No"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/sales/invoice": {
       "post": {
         "tags": [
-          "Sales"
+          "6. Sales & POS Billing"
         ],
         "summary": "Create Sales Invoice",
+        "description": "POS Billing API:\nSupports multi-item or single-item sales.\nCalculates line total via formula: Total = (Price + Tax) * Quantity.\nLogs Stock Ledger OUT movement.",
         "operationId": "create_sales_invoice_api_sales_invoice_post",
         "requestBody": {
           "content": {
@@ -192,40 +769,27 @@
               }
             }
           }
-        }
-      }
-    },
-    "/api/purchases": {
-      "get": {
-        "tags": [
-          "Purchases"
-        ],
-        "summary": "List Purchases",
-        "operationId": "list_purchases_api_purchases_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
           }
-        }
+        ]
       }
     },
-    "/api/purchases/invoice": {
+    "/api/invoice/print": {
       "post": {
         "tags": [
-          "Purchases"
+          "7. Commercial Print Invoice"
         ],
-        "summary": "Create Purchase Invoice",
-        "operationId": "create_purchase_invoice_api_purchases_invoice_post",
+        "summary": "Print Invoice Custom",
+        "description": "Renders commercial printable invoice from given JSON payload.\nFeatures: Item Name, Item Description (Optional), Quantity, Price, Tax, and Total = (Price + Tax) * Quantity.",
+        "operationId": "print_invoice_custom_api_invoice_print_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PurchaseInvoiceCreate"
+                "$ref": "#/components/schemas/PrintInvoiceRequest"
               }
             }
           },
@@ -235,8 +799,10 @@
           "200": {
             "description": "Successful Response",
             "content": {
-              "application/json": {
-                "schema": {}
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
               }
             }
           },
@@ -253,19 +819,43 @@
         }
       }
     },
-    "/api/stock": {
+    "/api/invoice/{invoice_no}/print": {
       "get": {
         "tags": [
-          "Inventory"
+          "7. Commercial Print Invoice"
         ],
-        "summary": "Get Stock Position",
-        "operationId": "get_stock_position_api_stock_get",
+        "summary": "Print Existing Sales Invoice",
+        "description": "Look up an existing sales invoice by number and render its printable commercial invoice.",
+        "operationId": "print_existing_sales_invoice_api_invoice__invoice_no__print_get",
+        "parameters": [
+          {
+            "name": "invoice_no",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Invoice No"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -275,9 +865,10 @@
     "/api/gst/report": {
       "get": {
         "tags": [
-          "GST & Tax"
+          "8. Tax & Financial Reports"
         ],
         "summary": "Get Gst Report",
+        "description": "Step 4 of Blueprint:\nGovernment GST API & Input Tax Credit (ITC) Engine.\nReconciles GSTR-1 Output Tax vs GSTR-2B Input Tax Credit, calculating net cash tax payable and ITC carried forward.",
         "operationId": "get_gst_report_api_gst_report_get",
         "responses": {
           "200": {
@@ -294,9 +885,10 @@
     "/api/pnl": {
       "get": {
         "tags": [
-          "ERPNext"
+          "8. Tax & Financial Reports"
         ],
         "summary": "Get Pnl Statement",
+        "description": "Step 5 of Blueprint:\nERPNext Profit & Loss Statement:\nRevenue, Cost of Goods Sold (COGS), Gross Profit, Operating Expenses, and Net Operating Profit.",
         "operationId": "get_pnl_statement_api_pnl_get",
         "parameters": [
           {
@@ -332,13 +924,14 @@
         }
       }
     },
-    "/api/etl/sync": {
-      "post": {
+    "/api/reports/summary": {
+      "get": {
         "tags": [
-          "ETL Pipeline"
+          "8. Tax & Financial Reports"
         ],
-        "summary": "Trigger Etl Sync",
-        "operationId": "trigger_etl_sync_api_etl_sync_post",
+        "summary": "Get Executive Summary",
+        "description": "Executive operational KPIs: revenue, active catalog SKUs, stock valuation, and tax credit buffer.",
+        "operationId": "get_executive_summary_api_reports_summary_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -351,13 +944,38 @@
         }
       }
     },
-    "/": {
+    "/api/etl/sync": {
+      "post": {
+        "tags": [
+          "9. Cloud DW Pipeline"
+        ],
+        "summary": "Trigger Etl Sync",
+        "description": "Step 2 of Blueprint:\nTriggers incremental ETL pipeline synchronizing operational collections to BigQuery dataset `jompoi_reporting`.",
+        "operationId": "trigger_etl_sync_api_etl_sync_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/api/health": {
       "get": {
         "tags": [
-          "Dashboard UI"
+          "System"
         ],
-        "summary": "Serve Dashboard",
-        "operationId": "serve_dashboard__get",
+        "summary": "Health Check",
+        "operationId": "health_check_api_health_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -390,6 +1008,17 @@
           "phone": {
             "type": "string",
             "title": "Phone"
+          },
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Address"
           }
         },
         "type": "object",
@@ -420,9 +1049,31 @@
             "type": "string",
             "title": "Item Code"
           },
+          "barcode": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Barcode"
+          },
           "name": {
             "type": "string",
             "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
           },
           "brand": {
             "type": "string",
@@ -436,10 +1087,26 @@
             "type": "number",
             "title": "Price"
           },
+          "cost_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Price"
+          },
           "gst_percent": {
             "type": "number",
             "title": "Gst Percent",
             "default": 5.0
+          },
+          "min_stock_alert": {
+            "type": "number",
+            "title": "Min Stock Alert",
+            "default": 10.0
           }
         },
         "type": "object",
@@ -451,6 +1118,181 @@
           "price"
         ],
         "title": "ItemCreate"
+      },
+      "ItemUpdate": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "cost_price": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cost Price"
+          },
+          "gst_percent": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Gst Percent"
+          },
+          "min_stock_alert": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min Stock Alert"
+          }
+        },
+        "type": "object",
+        "title": "ItemUpdate"
+      },
+      "PrintInvoiceItem": {
+        "properties": {
+          "item_name": {
+            "type": "string",
+            "title": "Item Name"
+          },
+          "item_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Description"
+          },
+          "quantity": {
+            "type": "number",
+            "title": "Quantity"
+          },
+          "price": {
+            "type": "number",
+            "title": "Price"
+          },
+          "tax_percent": {
+            "type": "number",
+            "title": "Tax Percent",
+            "default": 5.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_name",
+          "quantity",
+          "price"
+        ],
+        "title": "PrintInvoiceItem"
+      },
+      "PrintInvoiceRequest": {
+        "properties": {
+          "invoice_no": {
+            "type": "string",
+            "title": "Invoice No"
+          },
+          "invoice_date": {
+            "type": "string",
+            "title": "Invoice Date"
+          },
+          "customer_name": {
+            "type": "string",
+            "title": "Customer Name"
+          },
+          "customer_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Address"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PrintInvoiceItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "invoice_no",
+          "invoice_date",
+          "customer_name",
+          "items"
+        ],
+        "title": "PrintInvoiceRequest"
       },
       "PurchaseInvoiceCreate": {
         "properties": {
@@ -465,6 +1307,17 @@
           "vendor": {
             "type": "string",
             "title": "Vendor"
+          },
+          "vendor_gstin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendor Gstin"
           },
           "items": {
             "items": {
@@ -492,6 +1345,17 @@
           "item_name": {
             "type": "string",
             "title": "Item Name"
+          },
+          "item_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Description"
           },
           "quantity": {
             "type": "number",
@@ -523,8 +1387,26 @@
             "title": "Invoice No"
           },
           "invoice_date": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Invoice Date"
+          },
+          "customer_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Id"
           },
           "customer_name": {
             "type": "string",
@@ -534,24 +1416,89 @@
             "type": "string",
             "title": "Customer City"
           },
-          "item_code": {
+          "customer_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Customer Address"
+          },
+          "payment_mode": {
             "type": "string",
+            "title": "Payment Mode",
+            "default": "CASH"
+          },
+          "items": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/SalesItem"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Items"
+          },
+          "item_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Item Code"
           },
           "item_name": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Item Name"
           },
           "quantity": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Quantity"
           },
           "rate": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Rate"
           },
           "gst_percent": {
-            "type": "number",
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Gst Percent",
             "default": 5.0
           }
@@ -559,15 +1506,138 @@
         "type": "object",
         "required": [
           "invoice_no",
-          "invoice_date",
           "customer_name",
-          "customer_city",
-          "item_code",
-          "item_name",
-          "quantity",
-          "rate"
+          "customer_city"
         ],
         "title": "SalesInvoiceCreate"
+      },
+      "SalesItem": {
+        "properties": {
+          "item_code": {
+            "type": "string",
+            "title": "Item Code"
+          },
+          "quantity": {
+            "type": "number",
+            "title": "Quantity"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rate"
+          },
+          "discount_percent": {
+            "type": "number",
+            "title": "Discount Percent",
+            "default": 0.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_code",
+          "quantity"
+        ],
+        "title": "SalesItem"
+      },
+      "StockAdjustment": {
+        "properties": {
+          "item_code": {
+            "type": "string",
+            "title": "Item Code"
+          },
+          "adjustment_type": {
+            "type": "string",
+            "title": "Adjustment Type"
+          },
+          "quantity": {
+            "type": "number",
+            "title": "Quantity"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "notes": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_code",
+          "adjustment_type",
+          "quantity",
+          "reason"
+        ],
+        "title": "StockAdjustment"
+      },
+      "UserLogin": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "UserLogin"
+      },
+      "UserRegister": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "role": {
+            "$ref": "#/components/schemas/UserRole",
+            "default": "CASHIER"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password",
+          "full_name"
+        ],
+        "title": "UserRegister"
+      },
+      "UserRole": {
+        "type": "string",
+        "enum": [
+          "ADMIN",
+          "STORE_MANAGER",
+          "CASHIER",
+          "INVENTORY_STAFF"
+        ],
+        "title": "UserRole"
       },
       "ValidationError": {
         "properties": {
@@ -608,6 +1678,61 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "VendorCreate": {
+        "properties": {
+          "vendor_id": {
+            "type": "string",
+            "title": "Vendor Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "gstin": {
+            "type": "string",
+            "title": "Gstin"
+          },
+          "contact_person": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Contact Person"
+          },
+          "phone": {
+            "type": "string",
+            "title": "Phone"
+          },
+          "city": {
+            "type": "string",
+            "title": "City"
+          },
+          "state": {
+            "type": "string",
+            "title": "State",
+            "default": "Tamil Nadu"
+          }
+        },
+        "type": "object",
+        "required": [
+          "vendor_id",
+          "name",
+          "gstin",
+          "phone",
+          "city"
+        ],
+        "title": "VendorCreate"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "type": "http",
+        "scheme": "bearer"
       }
     }
   }

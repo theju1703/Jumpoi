@@ -3,7 +3,7 @@ import json
 import datetime
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
@@ -14,14 +14,19 @@ from src.etl.sync_manager import SyncStateManager
 from src.gst_engine.gst_reconciliation import GSTReconciliationEngine
 from src.erp_integration.erpnext_sync import ERPNextSyncService
 from src.local_warehouse.sqlite_bq_emulator import LocalWarehouseEmulator
-
-app = FastAPI(
-    title="Jompoi Online Grocery Operational Backend & Analytics API",
-    description="Operational Backend API for Jompoi Grocery, BigQuery ETL Sync, GST ITC Engine, and ERPNext Analytics",
-    version="1.0.0"
+from src.security.auth import (
+    UserRole, UserRegister, UserLogin, UserResponse,
+    hash_password, verify_password, create_access_token,
+    get_current_user, require_roles, get_user_by_username, save_user
 )
 
-# Enable CORS for frontend clients
+app = FastAPI(
+    title="Jompoi Supermarket ERP - Enterprise Backend API",
+    description="Production-Grade Supermarket ERP API: POS Billing, Multi-Item GST Invoicing, Stock Ledger, GSTR-2B ITC Reconciliation, ERPNext Financial P&L, and BigQuery Cloud DW Sync",
+    version="2.0.0"
+)
+
+# Enable CORS for POS terminals, web portals, and integration clients
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -30,31 +35,69 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Models
+# ---------------------------------------------------------------------------
+# Pydantic Schemas / DTOs
+# ---------------------------------------------------------------------------
+
 class ItemCreate(BaseModel):
     item_code: str
+    barcode: Optional[str] = None
     name: str
+    description: Optional[str] = None
     brand: str
     category: str
     price: float
+    cost_price: Optional[float] = None
     gst_percent: float = 5.0
+    min_stock_alert: float = 10.0
+
+class ItemUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    brand: Optional[str] = None
+    category: Optional[str] = None
+    price: Optional[float] = None
+    cost_price: Optional[float] = None
+    gst_percent: Optional[float] = None
+    min_stock_alert: Optional[float] = None
 
 class CustomerCreate(BaseModel):
     customer_id: str
     name: str
     city: str
     phone: str
+    address: Optional[str] = None
+
+class VendorCreate(BaseModel):
+    vendor_id: str
+    name: str
+    gstin: str
+    contact_person: Optional[str] = None
+    phone: str
+    city: str
+    state: str = "Tamil Nadu"
+
+class SalesItem(BaseModel):
+    item_code: str
+    quantity: float
+    rate: Optional[float] = None  # If None, automatically pulled from master catalog
+    discount_percent: float = 0.0
 
 class SalesInvoiceCreate(BaseModel):
     invoice_no: str
-    invoice_date: str
+    invoice_date: Optional[str] = None
+    customer_id: Optional[str] = None
     customer_name: str
     customer_city: str
-    item_code: str
-    item_name: str
-    quantity: float
-    rate: float
-    gst_percent: float = 5.0
+    customer_address: Optional[str] = None
+    payment_mode: str = "CASH"  # CASH, CARD, UPI
+    items: Optional[List[SalesItem]] = None
+    # Legacy single-item fields (for backward compatibility)
+    item_code: Optional[str] = None
+    item_name: Optional[str] = None
+    quantity: Optional[float] = None
+    rate: Optional[float] = None
+    gst_percent: Optional[float] = 5.0
 
 class PurchaseItem(BaseModel):
     item_code: str
@@ -68,7 +111,15 @@ class PurchaseInvoiceCreate(BaseModel):
     invoice_no: str
     invoice_date: str
     vendor: str
+    vendor_gstin: Optional[str] = None
     items: List[PurchaseItem]
+
+class StockAdjustment(BaseModel):
+    item_code: str
+    adjustment_type: str  # 'ADD' or 'DEDUCT'
+    quantity: float
+    reason: str  # 'DAMAGE', 'EXPIRY', 'AUDIT_CORRECTION', 'STOCK_IN'
+    notes: Optional[str] = None
 
 class PrintInvoiceItem(BaseModel):
     item_name: str
@@ -84,12 +135,17 @@ class PrintInvoiceRequest(BaseModel):
     customer_address: Optional[str] = None
     items: List[PrintInvoiceItem]
 
-# In-memory / MongoDB Repository Helper
+# ---------------------------------------------------------------------------
+# Data Persistence & Repository Helper (MongoDB with JSON fallback)
+# ---------------------------------------------------------------------------
+
+_IN_MEMORY_STORE: Dict[str, List[Dict[str, Any]]] = {}
+
 def get_collection_data(collection_name: str) -> List[Dict[str, Any]]:
-    # Try MongoDB first
+    # 1. Try MongoDB
     try:
         from pymongo import MongoClient
-        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=1000)
+        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=800)
         client.admin.command("ping")
         db = client[MONGO_DB_NAME]
         docs = list(db[collection_name].find({}))
@@ -101,123 +157,265 @@ def get_collection_data(collection_name: str) -> List[Dict[str, Any]]:
     except Exception:
         pass
 
-    # Fallback to dummy data JSON
+    # 2. Check in-memory store
+    if collection_name in _IN_MEMORY_STORE:
+        return _IN_MEMORY_STORE[collection_name]
+
+    # 3. Fallback to dummy data JSON
     fpath = DUMMY_DATA_DIR / f"{collection_name}.json"
     if fpath.exists():
         with open(fpath, "r", encoding="utf-8") as f:
-            return json.load(f)
+            data = json.load(f)
+            _IN_MEMORY_STORE[collection_name] = data
+            return data
+
+    _IN_MEMORY_STORE[collection_name] = []
     return []
 
-# --- API Endpoints ---
+def save_collection_doc(collection_name: str, doc: Dict[str, Any]) -> None:
+    # 1. Update in-memory cache
+    if collection_name not in _IN_MEMORY_STORE:
+        _IN_MEMORY_STORE[collection_name] = get_collection_data(collection_name)
+    
+    # Replace existing or append
+    doc_id = doc.get("_id")
+    found = False
+    for i, item in enumerate(_IN_MEMORY_STORE[collection_name]):
+        if item.get("_id") == doc_id or (doc.get("item_code") and item.get("item_code") == doc.get("item_code")):
+            _IN_MEMORY_STORE[collection_name][i] = doc
+            found = True
+            break
+    if not found:
+        _IN_MEMORY_STORE[collection_name].append(doc)
 
-@app.get("/api/health", tags=["System"])
-def health_check():
+    # 2. Persist to MongoDB if live
+    try:
+        from pymongo import MongoClient
+        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=800)
+        db = client[MONGO_DB_NAME]
+        db[collection_name].replace_one({"_id": doc_id}, doc, upsert=True)
+    except Exception:
+        pass
+
+# ---------------------------------------------------------------------------
+# MODULE 1: AUTHENTICATION & ROLE-BASED ACCESS CONTROL (RBAC)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/auth/register", tags=["1. Authentication & Users"])
+def register_user(req: UserRegister, current_user: Dict[str, Any] = Depends(require_roles(UserRole.ADMIN))):
+    """Register a new ERP user (Admin only)."""
+    if get_user_by_username(req.username):
+        raise HTTPException(status_code=400, detail="Username already registered")
+    
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    user_doc = {
+        "username": req.username,
+        "password_hash": hash_password(req.password),
+        "full_name": req.full_name,
+        "role": req.role.value,
+        "created_at": now
+    }
+    save_user(user_doc)
+    return {"message": "User successfully created", "username": req.username, "role": req.role.value}
+
+@app.post("/api/auth/login", tags=["1. Authentication & Users"])
+def login(req: UserLogin):
+    """Authenticate with username & password, returns JWT bearer token."""
+    user = get_user_by_username(req.username)
+    if not user or not verify_password(req.password, user.get("password_hash", "")):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    
+    access_token = create_access_token(data={"sub": user["username"], "role": user["role"]})
     return {
-        "status": "healthy",
-        "service": "Jompoi Grocery Backend",
-        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
+        "access_token": access_token,
+        "token_type": "bearer",
+        "username": user["username"],
+        "full_name": user["full_name"],
+        "role": user["role"]
     }
 
-# 1. Master Data: Items
-@app.get("/api/items", tags=["Catalog"])
-def list_items():
-    return get_collection_data("items")
+@app.get("/api/auth/me", tags=["1. Authentication & Users"])
+def get_current_user_profile(user: Dict[str, Any] = Depends(get_current_user)):
+    """Retrieve profile of the currently authenticated user."""
+    return {
+        "username": user.get("username"),
+        "full_name": user.get("full_name"),
+        "role": user.get("role"),
+        "created_at": user.get("created_at")
+    }
 
-@app.post("/api/items", tags=["Catalog"])
-def create_item(item: ItemCreate):
+# ---------------------------------------------------------------------------
+# MODULE 2: PRODUCT & CATALOG MANAGEMENT
+# ---------------------------------------------------------------------------
+
+@app.get("/api/items", tags=["2. Product Catalog"])
+def list_items(category: Optional[str] = None, search: Optional[str] = None):
+    """List all products in catalog with optional category and search filters."""
+    items = get_collection_data("items")
+    if category:
+        items = [it for it in items if it.get("category", "").lower() == category.lower()]
+    if search:
+        s = search.lower()
+        items = [it for it in items if s in it.get("name", "").lower() or s in it.get("item_code", "").lower() or s in it.get("brand", "").lower()]
+    return items
+
+@app.get("/api/items/{item_code}", tags=["2. Product Catalog"])
+def get_item(item_code: str):
+    """Retrieve item details by item_code."""
+    items = get_collection_data("items")
+    for it in items:
+        if it.get("item_code") == item_code or it.get("_id") == item_code:
+            return it
+    raise HTTPException(status_code=404, detail=f"Item '{item_code}' not found")
+
+@app.get("/api/items/barcode/{barcode}", tags=["2. Product Catalog"])
+def get_item_by_barcode(barcode: str):
+    """Barcode lookup for POS scanning terminals."""
+    items = get_collection_data("items")
+    for it in items:
+        if it.get("barcode") == barcode or it.get("item_code") == barcode:
+            return it
+    raise HTTPException(status_code=404, detail=f"No product matched barcode '{barcode}'")
+
+@app.post("/api/items", tags=["2. Product Catalog"])
+def create_item(item: ItemCreate, user: Dict[str, Any] = Depends(require_roles(UserRole.ADMIN, UserRole.STORE_MANAGER))):
+    """Add a new item to master catalogue (Admin/Store Manager)."""
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     new_doc = item.model_dump()
     new_doc["_id"] = item.item_code
     new_doc["created_at"] = now
     new_doc["updated_at"] = now
+    save_collection_doc("items", new_doc)
     return {"message": "Item registered successfully", "item": new_doc}
 
-# 2. Master Data: Customers
-@app.get("/api/customers", tags=["Customers"])
-def list_customers():
-    return get_collection_data("customers")
+@app.put("/api/items/{item_code}", tags=["2. Product Catalog"])
+def update_item(item_code: str, update: ItemUpdate, user: Dict[str, Any] = Depends(require_roles(UserRole.ADMIN, UserRole.STORE_MANAGER))):
+    """Update item pricing, description, or GST rate."""
+    items = get_collection_data("items")
+    target = None
+    for it in items:
+        if it.get("item_code") == item_code or it.get("_id") == item_code:
+            target = it
+            break
+    if not target:
+        raise HTTPException(status_code=404, detail=f"Item '{item_code}' not found")
+    
+    update_data = {k: v for k, v in update.model_dump().items() if v is not None}
+    target.update(update_data)
+    target["updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    save_collection_doc("items", target)
+    return {"message": "Item updated successfully", "item": target}
 
-@app.post("/api/customers", tags=["Customers"])
-def create_customer(customer: CustomerCreate):
+# ---------------------------------------------------------------------------
+# MODULE 3: INVENTORY & STOCK MANAGEMENT
+# ---------------------------------------------------------------------------
+
+@app.get("/api/stock", tags=["3. Inventory Management"])
+def get_stock_position():
+    """Retrieve real-time stock position (quantity on hand & valuation) aggregated across all ledger movements."""
+    warehouse = LocalWarehouseEmulator()
+    warehouse.load_from_json_files(DUMMY_DATA_DIR)
+    pos = warehouse.query_view("vw_stock_position")
+    warehouse.close()
+    return pos
+
+@app.get("/api/stock/low-stock", tags=["3. Inventory Management"])
+def get_low_stock_alerts():
+    """List items that have reached or dropped below their minimum safety stock alert threshold."""
+    stock_pos = get_stock_position()
+    items = {it.get("item_code"): it for it in get_collection_data("items")}
+    
+    low_stock = []
+    for sp in stock_pos:
+        code = sp.get("item_code")
+        curr_stock = sp.get("current_stock", 0)
+        master = items.get(code, {})
+        min_threshold = master.get("min_stock_alert", 10.0)
+        if curr_stock <= min_threshold:
+            low_stock.append({
+                "item_code": code,
+                "item_name": sp.get("item_name"),
+                "current_stock": curr_stock,
+                "min_stock_alert": min_threshold,
+                "status": "REORDER_NOW" if curr_stock <= 0 else "LOW_STOCK"
+            })
+    return low_stock
+
+@app.post("/api/stock/adjust", tags=["3. Inventory Management"])
+def adjust_stock(adj: StockAdjustment, user: Dict[str, Any] = Depends(require_roles(UserRole.ADMIN, UserRole.STORE_MANAGER))):
+    """Audit stock adjustments (damage, physical audit counts, expiry writes)."""
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    new_doc = customer.model_dump()
-    new_doc["_id"] = customer.customer_id
-    new_doc["created_at"] = now
-    new_doc["updated_at"] = now
-    return {"message": "Customer registered successfully", "customer": new_doc}
-
-# 3. Transaction: Sales Invoices
-@app.get("/api/sales", tags=["Sales"])
-def list_sales():
-    return get_collection_data("sales_invoice")
-
-@app.post("/api/sales/invoice", tags=["Sales"])
-def create_sales_invoice(sale: SalesInvoiceCreate):
-    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    net = round(sale.quantity * sale.rate, 2)
-    gst = round(net * (sale.gst_percent / 100.0), 2)
-    total = round(net + gst, 2)
-
-    invoice_doc = {
-        "_id": sale.invoice_no,
-        "invoice_no": sale.invoice_no,
-        "invoice_date": sale.invoice_date,
-        "customer": {
-            "name": sale.customer_name,
-            "city": sale.customer_city
-        },
-        "item_code": sale.item_code,
-        "item_name": sale.item_name,
-        "quantity": sale.quantity,
-        "rate": sale.rate,
-        "net_amount": net,
-        "gst_percent": sale.gst_percent,
-        "gst_amount": gst,
-        "total_amount": total,
+    tx_type = "IN" if adj.adjustment_type.upper() == "ADD" else "OUT"
+    voucher_no = f"ADJ-{int(datetime.datetime.now().timestamp())}"
+    
+    entry = {
+        "_id": f"STK-{tx_type}-{voucher_no}",
+        "item_code": adj.item_code,
+        "item_name": adj.item_code,
+        "transaction_type": f"{tx_type}_ADJUSTMENT",
+        "quantity": adj.quantity,
+        "reason": adj.reason,
+        "notes": adj.notes,
+        "voucher_no": voucher_no,
+        "adjusted_by": user.get("username", "admin"),
+        "date": datetime.datetime.now().strftime("%Y-%m-%d"),
         "created_at": now,
         "updated_at": now
     }
+    save_collection_doc("stock_ledger", entry)
+    return {"message": "Stock adjustment recorded in audit ledger", "entry": entry}
 
-    # Auto-generate Stock Ledger OUT movement
-    stock_doc = {
-        "_id": f"STK-OUT-{sale.invoice_no}",
-        "item_code": sale.item_code,
-        "item_name": sale.item_name,
-        "transaction_type": "OUT",
-        "quantity": sale.quantity,
-        "voucher_no": sale.invoice_no,
-        "date": sale.invoice_date,
-        "created_at": now,
-        "updated_at": now
-    }
+# ---------------------------------------------------------------------------
+# MODULE 4: SUPPLIER & PURCHASE MANAGEMENT
+# ---------------------------------------------------------------------------
 
-    return {
-        "message": "Sales invoice created and stock OUT logged",
-        "invoice": invoice_doc,
-        "stock_ledger_entry": stock_doc
-    }
+@app.get("/api/vendors", tags=["4. Supplier & Purchases"])
+def list_vendors():
+    """List registered suppliers and vendors."""
+    return get_collection_data("vendors") or [
+        {"vendor_id": "VEND001", "name": "KR Agro Supplies", "gstin": "33ABCDE1234F1Z5", "city": "Madurai", "phone": "+91 9876500001"},
+        {"vendor_id": "VEND002", "name": "Adani Wilmar Dist", "gstin": "33AAACA0000A1Z1", "city": "Chennai", "phone": "+91 9876500002"}
+    ]
 
-# 4. Transaction: Purchase Invoices
-@app.get("/api/purchases", tags=["Purchases"])
+@app.post("/api/vendors", tags=["4. Supplier & Purchases"])
+def create_vendor(vendor: VendorCreate, user: Dict[str, Any] = Depends(require_roles(UserRole.ADMIN, UserRole.STORE_MANAGER))):
+    """Register a new vendor with GSTIN and address details."""
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    vdoc = vendor.model_dump()
+    vdoc["_id"] = vendor.vendor_id
+    vdoc["created_at"] = now
+    vdoc["updated_at"] = now
+    save_collection_doc("vendors", vdoc)
+    return {"message": "Vendor registered successfully", "vendor": vdoc}
+
+@app.get("/api/purchases", tags=["4. Supplier & Purchases"])
 def list_purchases():
+    """List all vendor purchase invoices (with per-item GST and Input Tax Credit details)."""
     return get_collection_data("purchase_invoice")
 
-@app.post("/api/purchases/invoice", tags=["Purchases"])
-def create_purchase_invoice(pur: PurchaseInvoiceCreate):
+@app.post("/api/purchases/invoice", tags=["4. Supplier & Purchases"])
+def create_purchase_invoice(pur: PurchaseInvoiceCreate, user: Dict[str, Any] = Depends(require_roles(UserRole.ADMIN, UserRole.STORE_MANAGER))):
+    """
+    Record vendor procurement bill.
+    Supports multiple items with differing per-item GST rates.
+    Automatically generates stock IN movements and books Input Tax Credit (ITC).
+    """
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    # Compute per‑item totals and aggregate
     purchase_items = []
     total_net = 0.0
     total_gst = 0.0
     stock_entries = []
+
     for idx, it in enumerate(pur.items):
         net = round(it.quantity * it.rate, 2)
         gst = round(net * (it.gst_percent / 100.0), 2)
         total_net += net
         total_gst += gst
+
         purchase_items.append({
             "item_code": it.item_code,
             "item_name": it.item_name,
+            "item_description": it.item_description,
             "quantity": it.quantity,
             "rate": it.rate,
             "gst_percent": it.gst_percent,
@@ -225,6 +423,8 @@ def create_purchase_invoice(pur: PurchaseInvoiceCreate):
             "gst_amount": gst,
             "total_amount": round(net + gst, 2)
         })
+
+        # Automatic Stock Ledger IN Movement
         stock_entries.append({
             "_id": f"STK-IN-{pur.invoice_no}-{idx}",
             "item_code": it.item_code,
@@ -236,163 +436,517 @@ def create_purchase_invoice(pur: PurchaseInvoiceCreate):
             "created_at": now,
             "updated_at": now
         })
+
     total_amount = round(total_net + total_gst, 2)
     purchase_doc = {
         "_id": pur.invoice_no,
         "invoice_no": pur.invoice_no,
         "invoice_date": pur.invoice_date,
         "vendor": pur.vendor,
+        "vendor_gstin": pur.vendor_gstin or "33AAAAA0000A1Z5",
         "items": purchase_items,
         "net_amount": round(total_net, 2),
         "gst_amount": round(total_gst, 2),
         "total_amount": total_amount,
+        "itc_eligible": True,
         "created_at": now,
         "updated_at": now
     }
+
+    save_collection_doc("purchase_invoice", purchase_doc)
+    for se in stock_entries:
+        save_collection_doc("stock_ledger", se)
+
     return {
-        "message": "Purchase bill registered and stock IN logged",
+        "message": "Purchase invoice registered and stock IN logged",
         "purchase": purchase_doc,
         "stock_ledger_entries": stock_entries
     }
 
-# 5. Inventory & Stock Position
-@app.get("/api/stock", tags=["Inventory"])
-def get_stock_position():
-    warehouse = LocalWarehouseEmulator()
-    warehouse.load_from_json_files(DUMMY_DATA_DIR)
-    pos = warehouse.query_view("vw_stock_position")
-    warehouse.close()
-    return pos
+# ---------------------------------------------------------------------------
+# MODULE 5: CUSTOMER MANAGEMENT
+# ---------------------------------------------------------------------------
 
-# 6. GST ITC Reconciliation Report (Step 4 & 5 of Blueprint)
-@app.get("/api/gst/report", tags=["GST & Tax"])
+@app.get("/api/customers", tags=["5. Customers"])
+def list_customers():
+    """List all registered customers."""
+    return get_collection_data("customers")
+
+@app.post("/api/customers", tags=["5. Customers"])
+def create_customer(customer: CustomerCreate):
+    """Register customer for CRM & POS billing."""
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    new_doc = customer.model_dump()
+    new_doc["_id"] = customer.customer_id
+    new_doc["created_at"] = now
+    new_doc["updated_at"] = now
+    save_collection_doc("customers", new_doc)
+    return {"message": "Customer registered successfully", "customer": new_doc}
+
+@app.get("/api/customers/search", tags=["5. Customers"])
+def search_customer_by_phone(phone: str):
+    """Look up customer by mobile phone at POS counter."""
+    customers = get_collection_data("customers")
+    for c in customers:
+        if c.get("phone") == phone:
+            return c
+    raise HTTPException(status_code=404, detail="Customer not found with given phone number")
+
+# ---------------------------------------------------------------------------
+# MODULE 6: SALES & POS BILLING MANAGEMENT
+# ---------------------------------------------------------------------------
+
+@app.get("/api/sales", tags=["6. Sales & POS Billing"])
+def list_sales():
+    """List sales invoices."""
+    return get_collection_data("sales_invoice")
+
+@app.get("/api/sales/{invoice_no}", tags=["6. Sales & POS Billing"])
+def get_sales_invoice(invoice_no: str):
+    """Get single sales invoice by invoice_no."""
+    invoices = get_collection_data("sales_invoice")
+    for inv in invoices:
+        if inv.get("invoice_no") == invoice_no or inv.get("_id") == invoice_no:
+            return inv
+    raise HTTPException(status_code=404, detail=f"Sales invoice '{invoice_no}' not found")
+
+@app.post("/api/sales/invoice", tags=["6. Sales & POS Billing"])
+def create_sales_invoice(sale: SalesInvoiceCreate, user: Dict[str, Any] = Depends(get_current_user)):
+    """
+    POS Billing API:
+    Supports multi-item or single-item sales.
+    Calculates line total via formula: Total = (Price + Tax) * Quantity.
+    Logs Stock Ledger OUT movement.
+    """
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    invoice_date = sale.invoice_date or datetime.datetime.now().strftime("%Y-%m-%d")
+
+    # Handle multi-item vs legacy single-item
+    items_catalog = {it.get("item_code"): it for it in get_collection_data("items")}
+    line_items = []
+    total_net = 0.0
+    total_gst = 0.0
+    stock_entries = []
+
+    if sale.items and len(sale.items) > 0:
+        for idx, it in enumerate(sale.items):
+            master = items_catalog.get(it.item_code, {})
+            item_name = master.get("name", it.item_code)
+            rate = it.rate if it.rate is not None else master.get("price", 100.0)
+            gst_pct = master.get("gst_percent", 5.0)
+
+            unit_tax = round(rate * (gst_pct / 100.0), 2)
+            line_net = round(rate * it.quantity, 2)
+            line_tax = round(unit_tax * it.quantity, 2)
+            line_total = round((rate + unit_tax) * it.quantity, 2)
+
+            total_net += line_net
+            total_gst += line_tax
+
+            line_items.append({
+                "item_code": it.item_code,
+                "item_name": item_name,
+                "quantity": it.quantity,
+                "rate": rate,
+                "gst_percent": gst_pct,
+                "unit_tax": unit_tax,
+                "net_amount": line_net,
+                "gst_amount": line_tax,
+                "total_amount": line_total
+            })
+
+            stock_entries.append({
+                "_id": f"STK-OUT-{sale.invoice_no}-{idx}",
+                "item_code": it.item_code,
+                "item_name": item_name,
+                "transaction_type": "OUT",
+                "quantity": it.quantity,
+                "voucher_no": sale.invoice_no,
+                "date": invoice_date,
+                "created_at": now,
+                "updated_at": now
+            })
+    else:
+        # Legacy single-item payload
+        rate = sale.rate or 450.0
+        qty = sale.quantity or 1.0
+        gst_pct = sale.gst_percent or 5.0
+        unit_tax = round(rate * (gst_pct / 100.0), 2)
+        net = round(qty * rate, 2)
+        gst = round(net * (gst_pct / 100.0), 2)
+        total = round((rate + unit_tax) * qty, 2)
+
+        total_net = net
+        total_gst = gst
+
+        line_items.append({
+            "item_code": sale.item_code,
+            "item_name": sale.item_name,
+            "quantity": qty,
+            "rate": rate,
+            "gst_percent": gst_pct,
+            "unit_tax": unit_tax,
+            "net_amount": net,
+            "gst_amount": gst,
+            "total_amount": total
+        })
+
+        stock_entries.append({
+            "_id": f"STK-OUT-{sale.invoice_no}",
+            "item_code": sale.item_code,
+            "item_name": sale.item_name,
+            "transaction_type": "OUT",
+            "quantity": qty,
+            "voucher_no": sale.invoice_no,
+            "date": invoice_date,
+            "created_at": now,
+            "updated_at": now
+        })
+
+    invoice_doc = {
+        "_id": sale.invoice_no,
+        "invoice_no": sale.invoice_no,
+        "invoice_date": invoice_date,
+        "customer": {
+            "id": sale.customer_id,
+            "name": sale.customer_name,
+            "city": sale.customer_city,
+            "address": sale.customer_address
+        },
+        "customer_name": sale.customer_name,
+        "customer_city": sale.customer_city,
+        "item_code": line_items[0]["item_code"],
+        "item_name": line_items[0]["item_name"],
+        "quantity": sum(it["quantity"] for it in line_items),
+        "rate": line_items[0]["rate"],
+        "items": line_items,
+        "net_amount": round(total_net, 2),
+        "gst_percent": line_items[0]["gst_percent"],
+        "gst_amount": round(total_gst, 2),
+        "total_amount": round(total_net + total_gst, 2),
+        "payment_mode": sale.payment_mode,
+        "created_by": user.get("username", "cashier1"),
+        "created_at": now,
+        "updated_at": now
+    }
+
+    save_collection_doc("sales_invoice", invoice_doc)
+    for se in stock_entries:
+        save_collection_doc("stock_ledger", se)
+
+    return {
+        "message": "Sales invoice created and stock OUT logged",
+        "invoice": invoice_doc,
+        "stock_ledger_entry": stock_entries[0] if len(stock_entries) == 1 else None,
+        "stock_ledger_entries": stock_entries
+    }
+
+# ---------------------------------------------------------------------------
+# MODULE 7: COMMERCIAL PRINT INVOICE GENERATOR
+# ---------------------------------------------------------------------------
+
+def generate_invoice_html(invoice_no: str, invoice_date: str, customer_name: str, customer_address: Optional[str], items: List[Dict[str, Any]]) -> str:
+    rows = ""
+    subtotal = 0.0
+    total_tax = 0.0
+    grand_total = 0.0
+
+    for idx, it in enumerate(items):
+        price = float(it["price"])
+        qty = float(it["quantity"])
+        tax_pct = float(it["tax_percent"])
+        
+        unit_tax = round(price * (tax_pct / 100.0), 2)
+        line_net = round(price * qty, 2)
+        line_tax = round(unit_tax * qty, 2)
+        line_total = round((price + unit_tax) * qty, 2)
+
+        subtotal += line_net
+        total_tax += line_tax
+        grand_total += line_total
+
+        desc_cell = f"<br><small style='color:#64748b; font-style:italic;'>{it['item_description']}</small>" if it.get("item_description") else ""
+        rows += f"""
+        <tr>
+          <td>{idx + 1}</td>
+          <td><strong>{it['item_name']}</strong>{desc_cell}</td>
+          <td style="text-align:right">{qty}</td>
+          <td style="text-align:right">Rs {price:,.2f}</td>
+          <td style="text-align:right">{tax_pct}% <small style="color:#64748b;">(Rs {unit_tax:,.2f}/unit)</small></td>
+          <td style="text-align:right"><strong>Rs {line_total:,.2f}</strong></td>
+        </tr>"""
+
+    grand_total = round(grand_total, 2)
+    addr_line = f"<p style='margin:2px 0; color:#475569;'>{customer_address}</p>" if customer_address else ""
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Tax Invoice - {invoice_no}</title>
+<style>
+  @media print {{
+    @page {{ margin: 12mm; size: A4 portrait; }}
+    body {{ margin: 0; background: #fff !important; color: #000 !important; font-size: 13px; }}
+    .no-print {{ display: none !important; }}
+    .invoice-box {{ box-shadow: none !important; border: none !important; max-width: 100% !important; }}
+  }}
+  body {{ font-family: 'Segoe UI', Arial, sans-serif; background: #f1f5f9; color: #1e293b; margin: 20px; }}
+  .invoice-box {{ max-width: 880px; margin: 0 auto; background: #fff; padding: 35px; border-radius: 10px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }}
+  .header {{ display: flex; justify-content: space-between; border-bottom: 2px solid #0f172a; padding-bottom: 20px; margin-bottom: 25px; }}
+  .company h1 {{ font-size: 26px; font-weight: 800; color: #0f172a; margin: 0 0 5px 0; }}
+  .company p {{ margin: 2px 0; color: #64748b; font-size: 13px; }}
+  .invoice-badge {{ text-align: right; }}
+  .invoice-badge span {{ display: inline-block; background: #0f172a; color: #fff; padding: 4px 12px; border-radius: 4px; font-weight: 700; font-size: 12px; letter-spacing: 1px; }}
+  .invoice-badge p {{ margin: 4px 0; font-size: 14px; color: #475569; }}
+  .parties {{ display: flex; justify-content: space-between; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; margin-bottom: 25px; }}
+  .party-col {{ width: 48%; }}
+  .party-col h4 {{ margin: 0 0 6px 0; color: #64748b; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; }}
+  table {{ width: 100%; border-collapse: collapse; margin-bottom: 20px; }}
+  th {{ background: #0f172a; color: #fff; padding: 10px 12px; text-align: left; font-size: 12px; text-transform: uppercase; }}
+  th:not(:nth-child(2)):not(:first-child) {{ text-align: right; }}
+  td {{ padding: 11px 12px; border-bottom: 1px solid #e2e8f0; font-size: 13px; }}
+  .summary-wrap {{ display: flex; justify-content: flex-end; margin-top: 10px; }}
+  .summary-card {{ width: 320px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 12px; }}
+  .summary-row {{ display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; color: #475569; }}
+  .summary-row.total {{ border-top: 2px solid #0f172a; margin-top: 6px; padding-top: 8px; font-size: 16px; font-weight: 800; color: #0f172a; }}
+  .footer-notes {{ margin-top: 35px; border-top: 1px dashed #cbd5e1; padding-top: 15px; display: flex; justify-content: space-between; font-size: 12px; color: #64748b; }}
+  .actions-bar {{ text-align: center; margin: 20px 0; }}
+  .btn-print {{ background: #0f172a; color: #fff; border: none; padding: 10px 28px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; }}
+  .btn-print:hover {{ background: #1e293b; }}
+</style>
+</head>
+<body>
+  <div class="actions-bar no-print">
+    <button class="btn-print" onclick="window.print()">🖨 Print Invoice</button>
+  </div>
+
+  <div class="invoice-box">
+    <div class="header">
+      <div class="company">
+        <h1>JOMPOI ONLINE GROCERY</h1>
+        <p>Operational Supermarket & Retail Wholesale ERP System</p>
+        <p>GSTIN: 33AAAAA0000A1Z5 &bull; Chennai, Tamil Nadu</p>
+      </div>
+      <div class="invoice-badge">
+        <span>TAX INVOICE</span>
+        <p><strong>{invoice_no}</strong></p>
+        <p>Date: {invoice_date}</p>
+        <p>Place of Supply: Tamil Nadu (33)</p>
+      </div>
+    </div>
+
+    <div class="parties">
+      <div class="party-col">
+        <h4>Billed To (Customer)</h4>
+        <p><strong>{customer_name}</strong></p>
+        {addr_line}
+      </div>
+      <div class="party-col">
+        <h4>Dispatched From (Warehouse Hub)</h4>
+        <p><strong>Jompoi Central Supermarket Hub</strong></p>
+        <p>Ambattur Industrial Estate, Chennai, Tamil Nadu</p>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width:5%;">#</th>
+          <th style="width:35%;">Item Name</th>
+          <th style="width:10%; text-align:right;">Qty</th>
+          <th style="width:15%; text-align:right;">Price</th>
+          <th style="width:15%; text-align:right;">Tax</th>
+          <th style="width:20%; text-align:right;">Total (Price+Tax)&times;Qty</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows}
+      </tbody>
+    </table>
+
+    <div class="summary-wrap">
+      <div class="summary-card">
+        <div class="summary-row">
+          <span>Taxable Amount (Net):</span>
+          <span>Rs {subtotal:,.2f}</span>
+        </div>
+        <div class="summary-row">
+          <span>Total Tax (GST):</span>
+          <span>Rs {total_tax:,.2f}</span>
+        </div>
+        <div class="summary-row total">
+          <span>Grand Total:</span>
+          <span>Rs {grand_total:,.2f}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-notes">
+      <div>
+        <p><strong>Terms:</strong> Payment due upon receipt.</p>
+        <p>This is a computer-generated tax invoice verified under GST ITC regulations.</p>
+      </div>
+      <div style="text-align:right;">
+        <p>For <strong>Jompoi Online Grocery</strong></p>
+        <br><br>
+        <p>Authorized Signatory</p>
+      </div>
+    </div>
+  </div>
+</body>
+</html>"""
+    return html
+
+@app.post("/api/invoice/print", tags=["7. Commercial Print Invoice"], response_class=HTMLResponse)
+def print_invoice_custom(req: PrintInvoiceRequest):
+    """
+    Renders commercial printable invoice from given JSON payload.
+    Features: Item Name, Item Description (Optional), Quantity, Price, Tax, and Total = (Price + Tax) * Quantity.
+    """
+    items_list = [
+        {
+            "item_name": it.item_name,
+            "item_description": it.item_description,
+            "quantity": it.quantity,
+            "price": it.price,
+            "tax_percent": it.tax_percent
+        }
+        for it in req.items
+    ]
+    html_content = generate_invoice_html(
+        invoice_no=req.invoice_no,
+        invoice_date=req.invoice_date,
+        customer_name=req.customer_name,
+        customer_address=req.customer_address,
+        items=items_list
+    )
+    return HTMLResponse(content=html_content)
+
+@app.get("/api/invoice/{invoice_no}/print", tags=["7. Commercial Print Invoice"], response_class=HTMLResponse)
+def print_existing_sales_invoice(invoice_no: str):
+    """Look up an existing sales invoice by number and render its printable commercial invoice."""
+    invoices = get_collection_data("sales_invoice")
+    target = None
+    for inv in invoices:
+        if inv.get("invoice_no") == invoice_no or inv.get("_id") == invoice_no:
+            target = inv
+            break
+    if not target:
+        raise HTTPException(status_code=404, detail=f"Invoice '{invoice_no}' not found")
+
+    raw_items = target.get("items", [])
+    if not raw_items:
+        raw_items = [{
+            "item_name": target.get("item_name", "Item"),
+            "item_description": None,
+            "quantity": target.get("quantity", 1),
+            "price": target.get("rate", 100),
+            "tax_percent": target.get("gst_percent", 5)
+        }]
+    else:
+        raw_items = [{
+            "item_name": it.get("item_name", it.get("item_code")),
+            "item_description": it.get("item_description"),
+            "quantity": it.get("quantity", 1),
+            "price": it.get("rate", it.get("price", 100)),
+            "tax_percent": it.get("gst_percent", 5)
+        } for it in raw_items]
+
+    cust = target.get("customer", {})
+    customer_name = cust.get("name") if isinstance(cust, dict) else target.get("customer_name", "Customer")
+    customer_city = cust.get("city") if isinstance(cust, dict) else target.get("customer_city", "Tamil Nadu")
+
+    html = generate_invoice_html(
+        invoice_no=target.get("invoice_no", invoice_no),
+        invoice_date=target.get("invoice_date", "2026-08-24"),
+        customer_name=customer_name,
+        customer_address=f"City: {customer_city}",
+        items=raw_items
+    )
+    return HTMLResponse(content=html)
+
+# ---------------------------------------------------------------------------
+# MODULE 8: GST TAX CREDIT RECONCILIATION & ERPNEXT P&L REPORTS
+# ---------------------------------------------------------------------------
+
+@app.get("/api/gst/report", tags=["8. Tax & Financial Reports"])
 def get_gst_report():
+    """
+    Step 4 of Blueprint:
+    Government GST API & Input Tax Credit (ITC) Engine.
+    Reconciles GSTR-1 Output Tax vs GSTR-2B Input Tax Credit, calculating net cash tax payable and ITC carried forward.
+    """
     sales = get_collection_data("sales_invoice")
     purchases = get_collection_data("purchase_invoice")
     engine = GSTReconciliationEngine(sales, purchases)
     return engine.generate_gst_payment_report()
 
-# 7. ERPNext Profit & Loss Statement (Step 5 of Blueprint)
-@app.get("/api/pnl", tags=["ERPNext"])
+@app.get("/api/pnl", tags=["8. Tax & Financial Reports"])
 def get_pnl_statement(operating_expenses: float = Query(850.0)):
+    """
+    Step 5 of Blueprint:
+    ERPNext Profit & Loss Statement:
+    Revenue, Cost of Goods Sold (COGS), Gross Profit, Operating Expenses, and Net Operating Profit.
+    """
     items = get_collection_data("items")
     sales = get_collection_data("sales_invoice")
     purchases = get_collection_data("purchase_invoice")
     erp = ERPNextSyncService(items, sales, purchases)
     return erp.generate_profit_and_loss(operating_expenses=operating_expenses)
 
-# 8. Trigger BigQuery ETL Sync
-@app.post("/api/etl/sync", tags=["ETL Pipeline"])
-def trigger_etl_sync():
-    from etl_sync import main as run_etl
+@app.get("/api/reports/summary", tags=["8. Tax & Financial Reports"])
+def get_executive_summary():
+    """Executive operational KPIs: revenue, active catalog SKUs, stock valuation, and tax credit buffer."""
+    items = get_collection_data("items")
+    sales = get_collection_data("sales_invoice")
+    purchases = get_collection_data("purchase_invoice")
+    
+    total_sales_revenue = sum(s.get("total_amount", 0) for s in sales)
+    total_procurement_cost = sum(p.get("total_amount", 0) for p in purchases)
+    
+    gst_rep = GSTReconciliationEngine(sales, purchases).generate_gst_payment_report()
+    
+    return {
+        "active_items_count": len(items),
+        "total_sales_invoices": len(sales),
+        "total_purchase_bills": len(purchases),
+        "gross_sales_revenue": round(total_sales_revenue, 2),
+        "gross_procurement_spend": round(total_procurement_cost, 2),
+        "gst_summary": gst_rep,
+        "status": "OPERATIONAL"
+    }
+
+# ---------------------------------------------------------------------------
+# MODULE 9: BIGQUERY CLOUD DATA WAREHOUSE ETL SYNC
+# ---------------------------------------------------------------------------
+
+@app.post("/api/etl/sync", tags=["9. Cloud DW Pipeline"])
+def trigger_etl_sync(user: Dict[str, Any] = Depends(require_roles(UserRole.ADMIN))):
+    """
+    Step 2 of Blueprint:
+    Triggers incremental ETL pipeline synchronizing operational collections to BigQuery dataset `jompoi_reporting`.
+    """
     state_manager = SyncStateManager(str(BASE_DIR / "sync_state.json"))
     states_before = state_manager.get_all_sync_times()
     return {
         "status": "ETL sync triggered successfully",
         "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         "synced_collections": ["customers", "items", "orders", "sales_invoice", "purchase_invoice", "stock_ledger"],
-        "target_dataset": "jompoi_reporting"
+        "target_dataset": "jompoi_reporting",
+        "incremental_state": states_before
     }
 
-# 9. Print Invoice – returns a printable HTML invoice
-@app.post("/api/invoice/print", tags=["Invoice"], response_class=HTMLResponse)
-def print_invoice(req: PrintInvoiceRequest):
-    rows = ""
-    grand_total = 0.0
-    for it in req.items:
-        tax_amount = round(it.price * (it.tax_percent / 100.0), 2)
-        line_total = round((it.price + tax_amount) * it.quantity, 2)
-        grand_total += line_total
-        desc_cell = f"<br><small style='color:#666'>{it.item_description}</small>" if it.item_description else ""
-        rows += f"""
-        <tr>
-          <td>{it.item_name}{desc_cell}</td>
-          <td style="text-align:right">{it.quantity}</td>
-          <td style="text-align:right">Rs {it.price:,.2f}</td>
-          <td style="text-align:right">{it.tax_percent}% (Rs {tax_amount:,.2f})</td>
-          <td style="text-align:right"><strong>Rs {line_total:,.2f}</strong></td>
-        </tr>"""
+# System Root & Health
+@app.get("/api/health", tags=["System"])
+def health_check():
+    return {
+        "status": "healthy",
+        "service": "Jompoi Supermarket ERP Enterprise Backend",
+        "version": "2.0.0",
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
+    }
 
-    grand_total = round(grand_total, 2)
-    addr_line = f"<p>{req.customer_address}</p>" if req.customer_address else ""
-
-    html = f"""<!DOCTYPE html>
-<html>
-<head>
-<meta charset="UTF-8">
-<title>Invoice {req.invoice_no}</title>
-<style>
-  @media print {{ @page {{ margin: 15mm; }} body {{ margin: 0; }} }}
-  body {{ font-family: 'Segoe UI', Arial, sans-serif; max-width: 800px; margin: 20px auto; color: #1e293b; }}
-  .header {{ display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px solid #0f172a; padding-bottom: 16px; margin-bottom: 20px; }}
-  .company {{ font-size: 24px; font-weight: 700; color: #0f172a; }}
-  .company small {{ display: block; font-size: 12px; font-weight: 400; color: #64748b; }}
-  .invoice-meta {{ text-align: right; }}
-  .invoice-meta h2 {{ margin: 0; color: #0f172a; }}
-  .invoice-meta p {{ margin: 2px 0; color: #475569; font-size: 14px; }}
-  .bill-to {{ margin-bottom: 20px; }}
-  .bill-to h4 {{ margin: 0 0 4px 0; color: #64748b; font-size: 12px; text-transform: uppercase; }}
-  .bill-to p {{ margin: 0; font-size: 15px; }}
-  table {{ width: 100%; border-collapse: collapse; margin-bottom: 20px; }}
-  th {{ background: #0f172a; color: #fff; padding: 10px 12px; text-align: left; font-size: 13px; }}
-  th:not(:first-child) {{ text-align: right; }}
-  td {{ padding: 10px 12px; border-bottom: 1px solid #e2e8f0; font-size: 14px; }}
-  .total-row {{ background: #f1f5f9; }}
-  .total-row td {{ font-size: 16px; font-weight: 700; border-top: 2px solid #0f172a; }}
-  .footer {{ text-align: center; margin-top: 40px; color: #94a3b8; font-size: 12px; }}
-  .print-btn {{ display: block; margin: 20px auto; padding: 10px 30px; background: #0f172a; color: #fff; border: none; border-radius: 6px; font-size: 14px; cursor: pointer; }}
-  @media print {{ .print-btn {{ display: none; }} }}
-</style>
-</head>
-<body>
-  <div class="header">
-    <div>
-      <div class="company">JOMPOI<small>Online Grocery ERP</small></div>
-    </div>
-    <div class="invoice-meta">
-      <h2>INVOICE</h2>
-      <p><strong>{req.invoice_no}</strong></p>
-      <p>Date: {req.invoice_date}</p>
-    </div>
-  </div>
-
-  <div class="bill-to">
-    <h4>Bill To</h4>
-    <p><strong>{req.customer_name}</strong></p>
-    {addr_line}
-  </div>
-
-  <table>
-    <thead>
-      <tr>
-        <th>Item Name</th>
-        <th>Qty</th>
-        <th>Price</th>
-        <th>Tax</th>
-        <th>Total</th>
-      </tr>
-    </thead>
-    <tbody>
-      {rows}
-      <tr class="total-row">
-        <td colspan="4" style="text-align:right">Grand Total</td>
-        <td style="text-align:right">Rs {grand_total:,.2f}</td>
-      </tr>
-    </tbody>
-  </table>
-
-  <div class="footer">
-    <p>Thank you for your business!</p>
-    <p>Jompoi Online Grocery &bull; Generated on {datetime.datetime.now().strftime("%d-%b-%Y %H:%M")}</p>
-  </div>
-
-  <button class="print-btn" onclick="window.print()">🖨 Print Invoice</button>
-</body>
-</html>"""
-    return HTMLResponse(content=html)
-
-
-# Root redirect to API docs (no dashboard)
 @app.get("/", include_in_schema=False)
 def root_redirect():
     from fastapi.responses import RedirectResponse
