@@ -90,7 +90,6 @@ class SalesInvoiceCreate(BaseModel):
     customer_id: Optional[str] = None
     customer_name: str
     customer_city: str
-    customer_address: Optional[str] = None
     payment_mode: str = "CASH"  # CASH, CARD, UPI
     items: Optional[List[SalesItem]] = None
     # Legacy single-item fields (for backward compatibility)
@@ -159,7 +158,7 @@ class PrintInvoiceRequest(BaseModel):
     invoice_no: str
     invoice_date: str
     customer_name: str
-    customer_address: Optional[str] = None
+    customer_city: Optional[str] = None
     items: List[PrintInvoiceItem]
 
 # ---------------------------------------------------------------------------
@@ -802,8 +801,7 @@ def create_sales_invoice(sale: SalesInvoiceCreate, user: Dict[str, Any] = Depend
         "customer": {
             "id": sale.customer_id,
             "name": sale.customer_name,
-            "city": sale.customer_city,
-            "address": sale.customer_address
+            "city": sale.customer_city
         },
         "customer_name": sale.customer_name,
         "customer_city": sale.customer_city,
@@ -957,7 +955,7 @@ def process_sales_return(
 # MODULE 7: COMMERCIAL PRINT INVOICE GENERATOR
 # ---------------------------------------------------------------------------
 
-def generate_invoice_html(invoice_no: str, invoice_date: str, customer_name: str, customer_address: Optional[str], items: List[Dict[str, Any]]) -> str:
+def generate_invoice_html(invoice_no: str, invoice_date: str, customer_name: str, customer_city: Optional[str], items: List[Dict[str, Any]]) -> str:
     rows = ""
     subtotal = 0.0
     total_tax = 0.0
@@ -989,7 +987,7 @@ def generate_invoice_html(invoice_no: str, invoice_date: str, customer_name: str
         </tr>"""
 
     grand_total = round(grand_total, 2)
-    addr_line = f"<p style='margin:2px 0; color:#475569;'>{customer_address}</p>" if customer_address else ""
+    addr_line = f"<p style='margin:2px 0; color:#475569;'>City: {customer_city}</p>" if customer_city else ""
 
     html = f"""<!DOCTYPE html>
 <html>
@@ -1131,7 +1129,7 @@ def print_invoice_custom(req: PrintInvoiceRequest):
         invoice_no=req.invoice_no,
         invoice_date=req.invoice_date,
         customer_name=req.customer_name,
-        customer_address=req.customer_address,
+        customer_city=req.customer_city,
         items=items_list
     )
     return HTMLResponse(content=html_content)
@@ -1175,7 +1173,7 @@ def print_existing_sales_invoice(invoice_no: str):
         invoice_no=target.get("invoice_no", invoice_no),
         invoice_date=target.get("invoice_date", "2026-08-24"),
         customer_name=customer_name,
-        customer_address=f"City: {customer_city}",
+        customer_city=customer_city,
         items=raw_items
     )
     return HTMLResponse(content=html)

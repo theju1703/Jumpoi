@@ -1673,7 +1673,7 @@
             "type": "string",
             "title": "Customer Name"
           },
-          "customer_address": {
+          "customer_city": {
             "anyOf": [
               {
                 "type": "string"
@@ -1682,7 +1682,7 @@
                 "type": "null"
               }
             ],
-            "title": "Customer Address"
+            "title": "Customer City"
           },
           "items": {
             "items": {
@@ -1953,17 +1953,6 @@
           "customer_city": {
             "type": "string",
             "title": "Customer City"
-          },
-          "customer_address": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Customer Address"
           },
           "payment_mode": {
             "type": "string",

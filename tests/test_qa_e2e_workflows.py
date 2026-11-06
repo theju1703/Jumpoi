@@ -188,7 +188,6 @@ def test_workflow_c_complete_pos_sales_and_billing(cashier_headers):
         "invoice_date": datetime.date.today().isoformat(),
         "customer_name": "Dr. Rajesh Raman",
         "customer_city": "Madurai",
-        "customer_address": "45 Anna Nagar, Madurai - 625020",
         "payment_mode": "CARD",
         "items": [
             {

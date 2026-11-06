@@ -210,7 +210,6 @@ def test_print_invoice_custom():
         "invoice_no": "INV-PRINT-001",
         "invoice_date": "2026-11-05",
         "customer_name": "ABC Stores",
-        "customer_address": "123, Anna Nagar, Chennai",
         "items": [
             {
                 "item_name": "Basmati Rice 5kg",
