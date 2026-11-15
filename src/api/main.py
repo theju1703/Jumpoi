@@ -117,7 +117,7 @@ class VendorCreate(BaseModel):
     contact_person: Optional[str] = None
     phone: str
     city: str
-    state: Optional[str] = None
+    state: str = "string"
 
 class SalesItem(BaseModel):
     item_code: str
@@ -581,10 +581,11 @@ def create_vendor(vendor: VendorCreate, user: Dict[str, Any] = Depends(require_r
     """Register a new vendor with GSTIN and address details."""
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     vdoc = vendor.model_dump()
-    # Resolve state dynamically: use provided state, or infer from GSTIN 2-digit state code
-    if not vdoc.get("state") and vdoc.get("gstin") and len(vdoc["gstin"]) >= 2:
+    # Resolve state dynamically: if left as default placeholder "string" or empty, infer from GSTIN 2-digit code
+    if (not vdoc.get("state") or vdoc.get("state") == "string") and vdoc.get("gstin") and len(vdoc["gstin"]) >= 2:
         state_prefix = vdoc["gstin"][:2]
-        vdoc["state"] = GSTIN_STATE_CODES.get(state_prefix, "")
+        if state_prefix in GSTIN_STATE_CODES:
+            vdoc["state"] = GSTIN_STATE_CODES[state_prefix]
     vdoc["_id"] = vendor.vendor_id
     vdoc["created_at"] = now
     vdoc["updated_at"] = now

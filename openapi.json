@@ -2280,16 +2280,9 @@
             "title": "City"
           },
           "state": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
+            "type": "string",
             "title": "State",
-            "default": null
+            "default": "string"
           }
         },
         "type": "object",
