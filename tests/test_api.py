@@ -101,6 +101,7 @@ def test_vendors_list_and_create():
     assert response.status_code == 200
     assert isinstance(response.json(), list)
 
+    # 1. State automatically inferred from GSTIN prefix (33 -> Tamil Nadu)
     vendor_payload = {
         "vendor_id": "VEND-NEW-01",
         "name": "Organic Agri Hub",
@@ -111,6 +112,32 @@ def test_vendors_list_and_create():
     create_res = client.post("/api/vendors", json=vendor_payload)
     assert create_res.status_code == 200
     assert create_res.json()["vendor"]["name"] == "Organic Agri Hub"
+    assert create_res.json()["vendor"]["state"] == "Tamil Nadu"
+
+    # 2. State inferred dynamically from out-of-state GSTIN (27 -> Maharashtra)
+    mh_vendor_payload = {
+        "vendor_id": "VEND-MH-01",
+        "name": "Mumbai Spices Pvt Ltd",
+        "gstin": "27AABCM5678D1Z9",
+        "phone": "+91 9123456789",
+        "city": "Mumbai"
+    }
+    mh_res = client.post("/api/vendors", json=mh_vendor_payload)
+    assert mh_res.status_code == 200
+    assert mh_res.json()["vendor"]["state"] == "Maharashtra"
+
+    # 3. Explicit state provided in payload is preserved
+    ka_vendor_payload = {
+        "vendor_id": "VEND-KA-01",
+        "name": "Bengaluru Coffee Traders",
+        "gstin": "29AABCB1234E1Z1",
+        "phone": "+91 9876543210",
+        "city": "Bengaluru",
+        "state": "Karnataka"
+    }
+    ka_res = client.post("/api/vendors", json=ka_vendor_payload)
+    assert ka_res.status_code == 200
+    assert ka_res.json()["vendor"]["state"] == "Karnataka"
 
 def test_create_purchase_invoice_multi_item():
     payload = {

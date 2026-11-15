@@ -2101,9 +2101,16 @@
             "title": "City"
           },
           "state": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "State",
-            "default": "Tamil Nadu"
+            "default": null
           }
         },
         "type": "object",

@@ -69,6 +69,47 @@ class CustomerCreate(BaseModel):
     phone: str
     address: Optional[str] = None
 
+# Standard GST State Code Mapping (2-digit GSTIN prefix -> State Name)
+GSTIN_STATE_CODES: Dict[str, str] = {
+    "01": "Jammu and Kashmir",
+    "02": "Himachal Pradesh",
+    "03": "Punjab",
+    "04": "Chandigarh",
+    "05": "Uttarakhand",
+    "06": "Haryana",
+    "07": "Delhi",
+    "08": "Rajasthan",
+    "09": "Uttar Pradesh",
+    "10": "Bihar",
+    "11": "Sikkim",
+    "12": "Arunachal Pradesh",
+    "13": "Nagaland",
+    "14": "Manipur",
+    "15": "Mizoram",
+    "16": "Tripura",
+    "17": "Meghalaya",
+    "18": "Assam",
+    "19": "West Bengal",
+    "20": "Jharkhand",
+    "21": "Odisha",
+    "22": "Chhattisgarh",
+    "23": "Madhya Pradesh",
+    "24": "Gujarat",
+    "26": "Dadra & Nagar Haveli and Daman & Diu",
+    "27": "Maharashtra",
+    "29": "Karnataka",
+    "30": "Goa",
+    "31": "Lakshadweep",
+    "32": "Kerala",
+    "33": "Tamil Nadu",
+    "34": "Puducherry",
+    "35": "Andaman and Nicobar Islands",
+    "36": "Telangana",
+    "37": "Andhra Pradesh",
+    "38": "Ladakh",
+    "97": "Other Territory"
+}
+
 class VendorCreate(BaseModel):
     vendor_id: str
     name: str
@@ -76,7 +117,7 @@ class VendorCreate(BaseModel):
     contact_person: Optional[str] = None
     phone: str
     city: str
-    state: str = "Tamil Nadu"
+    state: Optional[str] = None
 
 class SalesItem(BaseModel):
     item_code: str
@@ -540,6 +581,10 @@ def create_vendor(vendor: VendorCreate, user: Dict[str, Any] = Depends(require_r
     """Register a new vendor with GSTIN and address details."""
     now = datetime.datetime.now(datetime.timezone.utc).isoformat()
     vdoc = vendor.model_dump()
+    # Resolve state dynamically: use provided state, or infer from GSTIN 2-digit state code
+    if not vdoc.get("state") and vdoc.get("gstin") and len(vdoc["gstin"]) >= 2:
+        state_prefix = vdoc["gstin"][:2]
+        vdoc["state"] = GSTIN_STATE_CODES.get(state_prefix, "")
     vdoc["_id"] = vendor.vendor_id
     vdoc["created_at"] = now
     vdoc["updated_at"] = now
