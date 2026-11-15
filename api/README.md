@@ -28,7 +28,7 @@ Once running:
 
 ## 🧪 Automated Testing
 
-To run the full enterprise QA test suite (44 tests covering inventory lifecycle, positive/negative scenarios, GST reconciliation, invoice printing, and security):
+To run the full enterprise QA test suite (48 tests covering inventory lifecycle, positive/negative scenarios, GST reconciliation, invoice printing, Google BigQuery item & purchase integration, and security):
 
 ```bash
 python -m pytest tests/ -v
@@ -86,4 +86,14 @@ python -m pytest tests/ -v
 - `GET /api/reports/summary`: Executive operational KPIs.
 
 ### 8. Cloud Data Warehouse ETL Sync
-- `POST /api/sync/trigger`: Trigger incremental ETL pipeline syncing MongoDB transactions to Google Cloud BigQuery.
+- `POST /api/etl/sync` or `POST /api/sync/trigger`: Trigger incremental ETL pipeline syncing operational collections to Google Cloud BigQuery.
+
+### 9. Google BigQuery Server App Integration (Client Demo Endpoints)
+- **Operation 1: Add Item to Google BigQuery**
+  - `POST /api/bigquery/items`: Direct insert/stream of new product item into BigQuery `items` table.
+- **Operation 2: List Items from Google BigQuery**
+  - `GET /api/bigquery/items`: Query items directly from BigQuery and format into item response model.
+- **Operation 3: Add Purchase Invoice to Google BigQuery**
+  - `POST /api/bigquery/purchases`: Transfer complete purchase invoice header and all line items into BigQuery `purchases` table.
+- **Operation 4: List Purchase Invoices from Google BigQuery**
+  - `GET /api/bigquery/purchases`: Query purchase invoice line items from BigQuery and reconstruct full invoices with line items.

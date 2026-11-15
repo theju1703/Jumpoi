@@ -31,6 +31,9 @@ class BigQueryLoader:
         """Checks if BigQuery client can connect and authenticate."""
         if not BQ_AVAILABLE:
             return False
+        # If no credentials configured in environment, don't attempt metadata service timeout
+        if not os.environ.get("GOOGLE_APPLICATION_CREDENTIALS") and not os.environ.get("GOOGLE_CLOUD_PROJECT"):
+            return False
         try:
             _ = self.client.project
             return True
@@ -70,3 +73,12 @@ class BigQueryLoader:
                 "inserted_count": 0,
                 "errors": [str(e)]
             }
+
+    def query(self, query_string: str) -> List[Dict[str, Any]]:
+        """
+        Executes a SQL query against Google Cloud BigQuery.
+        Returns a list of dicts representing each row.
+        """
+        query_job = self.client.query(query_string)
+        results = query_job.result()
+        return [dict(row) for row in results]

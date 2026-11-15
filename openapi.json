@@ -1359,6 +1359,180 @@
         ]
       }
     },
+    "/api/bigquery/items": {
+      "post": {
+        "tags": [
+          "10. Google BigQuery Integration"
+        ],
+        "summary": "Add item to Google BigQuery items table",
+        "description": "Operation 1: Add an item from the Server Application into Google BigQuery.\nInserts or streams the item record directly into BigQuery `items` table.",
+        "operationId": "add_item_to_bigquery_api_bigquery_items_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "10. Google BigQuery Integration"
+        ],
+        "summary": "List items from Google BigQuery items table",
+        "description": "Operation 2: List items from Google BigQuery in the Server Application.\nExecutes SELECT query against BigQuery dataset and maps records to Item models.",
+        "operationId": "list_items_from_bigquery_api_bigquery_items_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bigquery/purchases": {
+      "post": {
+        "tags": [
+          "10. Google BigQuery Integration"
+        ],
+        "summary": "Add purchase invoice to Google BigQuery purchases table",
+        "description": "Operation 3: Add a purchase invoice from the Server Application into Google BigQuery.\nTransfers full invoice header and line items into BigQuery `purchases` table.",
+        "operationId": "add_purchase_to_bigquery_api_bigquery_purchases_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PurchaseInvoiceCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "10. Google BigQuery Integration"
+        ],
+        "summary": "List purchase invoices from Google BigQuery purchases table",
+        "description": "Operation 4: List purchase invoices from Google BigQuery in the Server Application.\nRetrieves purchase line item records, aggregates them by invoice number,\nand returns reconstructed purchase invoices with full line item details.",
+        "operationId": "list_purchases_from_bigquery_api_bigquery_purchases_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "tags": [

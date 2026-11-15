@@ -11,7 +11,7 @@ class LocalWarehouseEmulator:
     """
 
     def __init__(self, db_path: str = ":memory:"):
-        self.conn = sqlite3.connect(db_path)
+        self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self._init_tables()
 
@@ -38,7 +38,11 @@ class LocalWarehouseEmulator:
             brand TEXT,
             category TEXT,
             price REAL,
+            cost_price REAL,
             gst_percent REAL,
+            min_stock_alert REAL,
+            barcode TEXT,
+            description TEXT,
             created_at TEXT,
             updated_at TEXT
         );
@@ -70,14 +74,17 @@ class LocalWarehouseEmulator:
             invoice_no TEXT,
             invoice_date TEXT,
             vendor TEXT,
+            vendor_gstin TEXT,
             item_code TEXT,
             item_name TEXT,
+            item_description TEXT,
             quantity REAL,
             rate REAL,
             net_amount REAL,
             gst_percent REAL,
             gst_amount REAL,
             total_amount REAL,
+            itc_eligible INTEGER DEFAULT 1,
             created_at TEXT,
             updated_at TEXT
         );
@@ -282,6 +289,43 @@ class LocalWarehouseEmulator:
         cursor.execute(f"SELECT * FROM {view_name}")
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
+
+    def query(self, query_string: str) -> List[Dict[str, Any]]:
+        """Executes a SQL query and returns results as a list of dicts."""
+        cursor = self.conn.cursor()
+        cursor.execute(query_string)
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+
+    def insert_rows(self, table_name: str, rows: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Inserts or replaces rows into the given table."""
+        if not rows:
+            return {"status": "skipped", "inserted_count": 0, "errors": []}
+        cursor = self.conn.cursor()
+        inserted = 0
+        errors = []
+        for r in rows:
+            try:
+                # filter keys to table columns
+                cursor.execute(f"PRAGMA table_info({table_name})")
+                valid_cols = {col["name"] for col in cursor.fetchall()}
+                filtered_row = {k: v for k, v in r.items() if k in valid_cols}
+                if not filtered_row:
+                    continue
+                cols = list(filtered_row.keys())
+                placeholders = ", ".join(["?"] * len(cols))
+                sql = f"INSERT OR REPLACE INTO {table_name} ({', '.join(cols)}) VALUES ({placeholders})"
+                cursor.execute(sql, list(filtered_row.values()))
+                inserted += 1
+            except Exception as e:
+                errors.append(str(e))
+        self.conn.commit()
+        return {
+            "status": "success" if not errors else ("partial_error" if inserted else "failed"),
+            "table": table_name,
+            "inserted_count": inserted,
+            "errors": errors
+        }
 
     def close(self):
         self.conn.close()

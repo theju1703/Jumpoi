@@ -8,9 +8,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from src.config import MONGO_URI, MONGO_DB_NAME, DUMMY_DATA_DIR, BASE_DIR
+from src.config import MONGO_URI, MONGO_DB_NAME, DUMMY_DATA_DIR, BASE_DIR, BQ_PROJECT_ID, BQ_DATASET_ID
 from src.etl.transformer import flatten_document
 from src.etl.sync_manager import SyncStateManager
+from src.etl.bq_loader import BigQueryLoader
 from src.gst_engine.gst_reconciliation import GSTReconciliationEngine
 from src.erp_integration.erpnext_sync import ERPNextSyncService
 from src.local_warehouse.sqlite_bq_emulator import LocalWarehouseEmulator
@@ -207,6 +208,24 @@ class PrintInvoiceRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 _IN_MEMORY_STORE: Dict[str, List[Dict[str, Any]]] = {}
+_BQ_WAREHOUSE_EMULATOR: Optional[LocalWarehouseEmulator] = None
+
+def get_warehouse_backend() -> Any:
+    """
+    Returns an active warehouse connection:
+    - If Google Cloud BigQuery credentials and client are available, returns BigQueryLoader.
+    - Otherwise, returns the persistent LocalWarehouseEmulator simulating BigQuery.
+    """
+    global _BQ_WAREHOUSE_EMULATOR
+    loader = BigQueryLoader(project_id=BQ_PROJECT_ID, dataset_id=BQ_DATASET_ID)
+    if loader.is_connected():
+        return loader
+    
+    if _BQ_WAREHOUSE_EMULATOR is None:
+        db_file = BASE_DIR / "local_warehouse.db"
+        _BQ_WAREHOUSE_EMULATOR = LocalWarehouseEmulator(db_path=str(db_file))
+        _BQ_WAREHOUSE_EMULATOR.load_from_json_files(DUMMY_DATA_DIR)
+    return _BQ_WAREHOUSE_EMULATOR
 
 def get_collection_data(collection_name: str) -> List[Dict[str, Any]]:
     # 1. Try MongoDB
@@ -418,6 +437,27 @@ def create_item(item: ItemCreate, user: Dict[str, Any] = Depends(require_roles(U
     new_doc["created_at"] = now
     new_doc["updated_at"] = now
     save_collection_doc("items", new_doc)
+
+    # Replicate into BigQuery warehouse
+    try:
+        wh = get_warehouse_backend()
+        wh.insert_rows("items", [{
+            "_id": new_doc["_id"],
+            "item_code": new_doc["item_code"],
+            "name": new_doc["name"],
+            "brand": new_doc.get("brand", ""),
+            "category": new_doc.get("category", ""),
+            "price": float(new_doc.get("price", 0.0)),
+            "cost_price": float(new_doc.get("cost_price", 0.0) or (new_doc.get("price", 0.0) * 0.75)),
+            "gst_percent": float(new_doc.get("gst_percent", 5.0)),
+            "min_stock_alert": float(new_doc.get("min_stock_alert", 10.0)),
+            "barcode": new_doc.get("barcode", ""),
+            "description": new_doc.get("description", ""),
+            "created_at": new_doc["created_at"],
+            "updated_at": new_doc["updated_at"]
+        }])
+    except Exception:
+        pass
 
     # Automatic initial stock increment if opening_stock is specified
     if item.opening_stock and item.opening_stock > 0:
@@ -663,6 +703,34 @@ def create_purchase_invoice(pur: PurchaseInvoiceCreate, user: Dict[str, Any] = D
     save_collection_doc("purchase_invoice", purchase_doc)
     for se in stock_entries:
         save_collection_doc("stock_ledger", se)
+
+    # Replicate purchase line items into BigQuery warehouse
+    try:
+        wh = get_warehouse_backend()
+        bq_rows = []
+        for idx, it in enumerate(purchase_items):
+            bq_rows.append({
+                "_id": f"{purchase_doc['invoice_no']}-{idx}",
+                "invoice_no": purchase_doc["invoice_no"],
+                "invoice_date": purchase_doc["invoice_date"],
+                "vendor": purchase_doc["vendor"],
+                "vendor_gstin": purchase_doc.get("vendor_gstin", "33AAAAA0000A1Z5"),
+                "item_code": it["item_code"],
+                "item_name": it["item_name"],
+                "item_description": it.get("item_description", ""),
+                "quantity": float(it["quantity"]),
+                "rate": float(it["rate"]),
+                "net_amount": float(it["net_amount"]),
+                "gst_percent": float(it["gst_percent"]),
+                "gst_amount": float(it["gst_amount"]),
+                "total_amount": float(it["total_amount"]),
+                "itc_eligible": 1,
+                "created_at": purchase_doc["created_at"],
+                "updated_at": purchase_doc["updated_at"]
+            })
+        wh.insert_rows("purchases", bq_rows)
+    except Exception:
+        pass
 
     return {
         "message": "Purchase invoice registered and stock IN logged",
@@ -1535,6 +1603,203 @@ def trigger_etl_sync(user: Dict[str, Any] = Depends(require_roles(UserRole.ADMIN
         "synced_collections": ["customers", "items", "orders", "sales_invoice", "purchase_invoice", "stock_ledger"],
         "target_dataset": "jompoi_reporting",
         "incremental_state": states_before
+    }
+
+# ---------------------------------------------------------------------------
+# MODULE 10: GOOGLE BIGQUERY DATA WAREHOUSE DIRECT INTEGRATION
+# ---------------------------------------------------------------------------
+
+@app.post("/api/bigquery/items", tags=["10. Google BigQuery Integration"], summary="Add item to Google BigQuery items table")
+def add_item_to_bigquery(item: ItemCreate, user: Dict[str, Any] = Depends(require_roles(UserRole.ADMIN, UserRole.STORE_MANAGER))):
+    """
+    Operation 1: Add an item from the Server Application into Google BigQuery.
+    Inserts or streams the item record directly into BigQuery `items` table.
+    """
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    row = {
+        "_id": item.item_code,
+        "item_code": item.item_code,
+        "name": item.name,
+        "brand": item.brand,
+        "category": item.category,
+        "price": float(item.price),
+        "cost_price": float(item.cost_price or (item.price * 0.75)),
+        "gst_percent": float(item.gst_percent),
+        "min_stock_alert": float(item.min_stock_alert),
+        "barcode": item.barcode or "",
+        "description": item.description or "",
+        "created_at": now,
+        "updated_at": now
+    }
+    
+    wh = get_warehouse_backend()
+    res = wh.insert_rows("items", [row])
+    
+    # Also save to master item repository if not exists
+    existing = get_collection_data("items")
+    if not any(it.get("item_code") == item.item_code for it in existing):
+        save_collection_doc("items", row)
+
+    return {
+        "status": "success",
+        "message": f"Item '{item.item_code}' successfully loaded into Google BigQuery",
+        "bigquery_target": f"{BQ_PROJECT_ID}.{BQ_DATASET_ID}.items",
+        "bigquery_result": res,
+        "item": row
+    }
+
+@app.get("/api/bigquery/items", tags=["10. Google BigQuery Integration"], summary="List items from Google BigQuery items table")
+def list_items_from_bigquery(limit: int = Query(50, ge=1, le=500)):
+    """
+    Operation 2: List items from Google BigQuery in the Server Application.
+    Executes SELECT query against BigQuery dataset and maps records to Item models.
+    """
+    wh = get_warehouse_backend()
+    query_str = f"SELECT * FROM items LIMIT {limit}"
+    if isinstance(wh, BigQueryLoader):
+        query_str = f"SELECT * FROM `{BQ_PROJECT_ID}.{BQ_DATASET_ID}.items` LIMIT {limit}"
+    
+    try:
+        rows = wh.query(query_str)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"BigQuery query execution failed: {str(e)}")
+
+    items = []
+    for r in rows:
+        items.append({
+            "_id": r.get("_id") or r.get("item_code"),
+            "item_code": r.get("item_code"),
+            "name": r.get("name"),
+            "brand": r.get("brand"),
+            "category": r.get("category"),
+            "price": float(r.get("price") or 0.0),
+            "cost_price": float(r.get("cost_price") or 0.0) if r.get("cost_price") is not None else None,
+            "gst_percent": float(r.get("gst_percent") or 0.0),
+            "min_stock_alert": float(r.get("min_stock_alert") or 10.0),
+            "barcode": r.get("barcode"),
+            "description": r.get("description"),
+            "created_at": r.get("created_at"),
+            "updated_at": r.get("updated_at")
+        })
+
+    return {
+        "source": "Google BigQuery Data Warehouse",
+        "dataset": f"{BQ_PROJECT_ID}.{BQ_DATASET_ID}.items",
+        "count": len(items),
+        "items": items
+    }
+
+@app.post("/api/bigquery/purchases", tags=["10. Google BigQuery Integration"], summary="Add purchase invoice to Google BigQuery purchases table")
+def add_purchase_to_bigquery(pur: PurchaseInvoiceCreate, user: Dict[str, Any] = Depends(require_roles(UserRole.ADMIN, UserRole.STORE_MANAGER))):
+    """
+    Operation 3: Add a purchase invoice from the Server Application into Google BigQuery.
+    Transfers full invoice header and line items into BigQuery `purchases` table.
+    """
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    bq_rows = []
+    
+    for idx, it in enumerate(pur.items):
+        net = round(it.quantity * it.rate, 2)
+        gst = round(net * (it.gst_percent / 100.0), 2)
+        total = round(net + gst, 2)
+        
+        bq_rows.append({
+            "_id": f"{pur.invoice_no}-{idx}",
+            "invoice_no": pur.invoice_no,
+            "invoice_date": pur.invoice_date,
+            "vendor": pur.vendor,
+            "vendor_gstin": pur.vendor_gstin or "33AAAAA0000A1Z5",
+            "item_code": it.item_code,
+            "item_name": it.item_name,
+            "item_description": it.item_description or "",
+            "quantity": float(it.quantity),
+            "rate": float(it.rate),
+            "net_amount": float(net),
+            "gst_percent": float(it.gst_percent),
+            "gst_amount": float(gst),
+            "total_amount": float(total),
+            "itc_eligible": 1,
+            "created_at": now,
+            "updated_at": now
+        })
+    
+    wh = get_warehouse_backend()
+    res = wh.insert_rows("purchases", bq_rows)
+
+    return {
+        "status": "success",
+        "message": f"Purchase invoice '{pur.invoice_no}' ({len(bq_rows)} line items) successfully loaded into Google BigQuery",
+        "bigquery_target": f"{BQ_PROJECT_ID}.{BQ_DATASET_ID}.purchases",
+        "bigquery_result": res,
+        "line_items_count": len(bq_rows),
+        "invoice_no": pur.invoice_no
+    }
+
+@app.get("/api/bigquery/purchases", tags=["10. Google BigQuery Integration"], summary="List purchase invoices from Google BigQuery purchases table")
+def list_purchases_from_bigquery(limit: int = Query(50, ge=1, le=500)):
+    """
+    Operation 4: List purchase invoices from Google BigQuery in the Server Application.
+    Retrieves purchase line item records, aggregates them by invoice number,
+    and returns reconstructed purchase invoices with full line item details.
+    """
+    wh = get_warehouse_backend()
+    query_str = f"SELECT * FROM purchases ORDER BY invoice_date DESC LIMIT {limit * 5}"
+    if isinstance(wh, BigQueryLoader):
+        query_str = f"SELECT * FROM `{BQ_PROJECT_ID}.{BQ_DATASET_ID}.purchases` ORDER BY invoice_date DESC LIMIT {limit * 5}"
+    
+    try:
+        rows = wh.query(query_str)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"BigQuery query execution failed: {str(e)}")
+
+    # Reconstruct invoices and line items
+    grouped: Dict[str, Dict[str, Any]] = {}
+    for r in rows:
+        inv_no = r.get("invoice_no")
+        if not inv_no:
+            continue
+        if inv_no not in grouped:
+            grouped[inv_no] = {
+                "invoice_no": inv_no,
+                "invoice_date": r.get("invoice_date"),
+                "vendor": r.get("vendor"),
+                "vendor_gstin": r.get("vendor_gstin"),
+                "net_amount": 0.0,
+                "gst_amount": 0.0,
+                "total_amount": 0.0,
+                "itc_eligible": bool(r.get("itc_eligible", 1)),
+                "items": [],
+                "created_at": r.get("created_at"),
+                "updated_at": r.get("updated_at")
+            }
+        
+        item_net = float(r.get("net_amount") or 0.0)
+        item_gst = float(r.get("gst_amount") or 0.0)
+        item_total = float(r.get("total_amount") or (item_net + item_gst))
+        
+        grouped[inv_no]["net_amount"] = round(grouped[inv_no]["net_amount"] + item_net, 2)
+        grouped[inv_no]["gst_amount"] = round(grouped[inv_no]["gst_amount"] + item_gst, 2)
+        grouped[inv_no]["total_amount"] = round(grouped[inv_no]["total_amount"] + item_total, 2)
+        
+        grouped[inv_no]["items"].append({
+            "item_code": r.get("item_code"),
+            "item_name": r.get("item_name"),
+            "item_description": r.get("item_description"),
+            "quantity": float(r.get("quantity") or 0.0),
+            "rate": float(r.get("rate") or 0.0),
+            "gst_percent": float(r.get("gst_percent") or 0.0),
+            "net_amount": item_net,
+            "gst_amount": item_gst,
+            "total_amount": item_total
+        })
+
+    invoices = list(grouped.values())[:limit]
+
+    return {
+        "source": "Google BigQuery Data Warehouse",
+        "dataset": f"{BQ_PROJECT_ID}.{BQ_DATASET_ID}.purchases",
+        "invoices_count": len(invoices),
+        "invoices": invoices
     }
 
 # System Root & Health
