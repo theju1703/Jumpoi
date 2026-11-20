@@ -191,4 +191,34 @@ object ErpApiClient {
             fallback = { true }
         )
     }
+
+    suspend fun getBigQueryItems(): List<Item> {
+        return makeRequest(
+            endpoint = "/api/bigquery/items",
+            method = "GET",
+            parser = {
+                val resp = jsonParser.decodeFromString<BigQueryItemsResponse>(it)
+                resp.items
+            },
+            fallback = {
+                listOf(
+                    Item("ITM001", "Basmati Rice 5kg", "India Gate", "Grains & Rice", 450.0, 5.0, 10.0, "890123456001", "Aged long grain premium basmati"),
+                    Item("ITM002", "Sunflower Oil 1L", "Fortune", "Edible Oils", 135.0, 5.0, 20.0, "890123456002", "Refined sunflower cooking oil"),
+                    Item("ITM003", "Toor Dal 1kg", "Tata Sampann", "Pulses", 160.0, 0.0, 15.0, "890123456003", "Unpolished protein rich toor dal"),
+                    Item("ITM004", "Milk 500ml", "Aavin", "Dairy", 25.0, 0.0, 30.0, "890123456004", "Pasteurized full cream fresh milk"),
+                    Item("ITM005", "Chakki Atta 5kg", "Aashirvaad", "Flour & Atta", 260.0, 5.0, 15.0, "890123456005", "100% whole wheat chakki ground atta")
+                )
+            }
+        )
+    }
+
+    suspend fun addBigQueryItem(req: BigQueryItemCreateRequest): Boolean {
+        return makeRequest(
+            endpoint = "/api/bigquery/items",
+            method = "POST",
+            requestBody = jsonParser.encodeToString(req),
+            parser = { true },
+            fallback = { true }
+        )
+    }
 }

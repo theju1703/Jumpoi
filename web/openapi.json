@@ -122,7 +122,7 @@
           "2. Product Catalog"
         ],
         "summary": "List Items",
-        "description": "List all products in catalog with optional category and search filters.",
+        "description": "List all products in catalog with real-time stock quantities on hand.\nSupports filtering by category, search by item name/code/brand, and stock status.",
         "operationId": "list_items_api_items_get",
         "parameters": [
           {
@@ -156,6 +156,23 @@
               ],
               "title": "Search"
             }
+          },
+          {
+            "name": "in_stock_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": false,
+              "title": "In Stock Only"
+            }
           }
         ],
         "responses": {
@@ -184,7 +201,7 @@
           "2. Product Catalog"
         ],
         "summary": "Create Item",
-        "description": "Add a new item to master catalogue (Admin/Store Manager).",
+        "description": "Add a new item to master catalogue (Admin/Store Manager).\nIf opening_stock is provided (> 0), automatically logs initial stock IN movement.",
         "operationId": "create_item_api_items_post",
         "security": [
           {
@@ -229,7 +246,7 @@
           "2. Product Catalog"
         ],
         "summary": "Get Item",
-        "description": "Retrieve item details by item_code.",
+        "description": "Retrieve item details by item_code along with current quantity on hand.",
         "operationId": "get_item_api_items__item_code__get",
         "parameters": [
           {
@@ -368,7 +385,7 @@
           "2. Product Catalog"
         ],
         "summary": "Get Item By Barcode",
-        "description": "Barcode lookup for POS scanning terminals.",
+        "description": "Barcode lookup for POS scanning terminals with current stock availability.",
         "operationId": "get_item_by_barcode_api_items_barcode__barcode__get",
         "parameters": [
           {
@@ -408,15 +425,44 @@
         "tags": [
           "3. Inventory Management"
         ],
-        "summary": "Get Stock Position",
-        "description": "Retrieve real-time stock position (quantity on hand & valuation) aggregated across all ledger movements.",
+        "summary": "Real-time warehouse stock balance & valuation",
+        "description": "Retrieve real-time stock position aggregated across all ledger movements (sum(IN) - sum(OUT)).\nSupports query parameter ?low_stock_only=true to filter safety stock alerts.",
         "operationId": "get_stock_position_api_stock_get",
+        "parameters": [
+          {
+            "name": "low_stock_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "default": false,
+              "title": "Low Stock Only"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -428,8 +474,8 @@
         "tags": [
           "3. Inventory Management"
         ],
-        "summary": "Get Low Stock Alerts",
-        "description": "List items that have reached or dropped below their minimum safety stock alert threshold.",
+        "summary": "Low safety stock alerts (Consolidated alias)",
+        "description": "List items that have reached or dropped below their minimum safety stock alert threshold.\nConsolidated alias delegating to get_stock_position(low_stock_only=True).",
         "operationId": "get_low_stock_alerts_api_stock_low_stock_get",
         "responses": {
           "200": {
@@ -551,75 +597,12 @@
         ]
       }
     },
-    "/api/purchases/invoices": {
-      "get": {
-        "tags": [
-          "4. Supplier & Purchases"
-        ],
-        "summary": "List Purchases",
-        "description": "List all vendor purchase invoices (with per-item GST and Input Tax Credit details).",
-        "operationId": "list_purchases_api_purchases_invoices_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "4. Supplier & Purchases"
-        ],
-        "summary": "Create Purchase Invoice",
-        "description": "Record vendor procurement bill.\nSupports multiple items with differing per-item GST rates.\nAutomatically generates stock IN movements and books Input Tax Credit (ITC).",
-        "operationId": "create_purchase_invoice_api_purchases_invoices_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/PurchaseInvoiceCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
     "/api/purchases": {
       "get": {
         "tags": [
           "4. Supplier & Purchases"
         ],
-        "summary": "List Purchases",
+        "summary": "List vendor procurement invoices",
         "description": "List all vendor purchase invoices (with per-item GST and Input Tax Credit details).",
         "operationId": "list_purchases_api_purchases_get",
         "responses": {
@@ -639,7 +622,7 @@
         "tags": [
           "4. Supplier & Purchases"
         ],
-        "summary": "Create Purchase Invoice",
+        "summary": "Record vendor procurement invoice (increases stock & books ITC)",
         "description": "Record vendor procurement bill.\nSupports multiple items with differing per-item GST rates.\nAutomatically generates stock IN movements and books Input Tax Credit (ITC).",
         "operationId": "create_purchase_invoice_api_purchases_invoice_post",
         "requestBody": {
@@ -684,15 +667,59 @@
         "tags": [
           "5. Customers"
         ],
-        "summary": "List Customers",
-        "description": "List all registered customers.",
+        "summary": "List & search customer directory",
+        "description": "List registered customers. Supports unified search filter across name, phone, city, or ID,\nas well as dedicated ?phone= lookup for POS counter terminals.",
         "operationId": "list_customers_api_customers_get",
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "name": "phone",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Phone"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
               }
             }
           }
@@ -702,18 +729,18 @@
         "tags": [
           "5. Customers"
         ],
-        "summary": "Create Customer",
+        "summary": "Register new customer",
         "description": "Register customer for CRM & POS billing.",
         "operationId": "create_customer_api_customers_post",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CustomerCreate"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
@@ -742,9 +769,10 @@
         "tags": [
           "5. Customers"
         ],
-        "summary": "Search Customer By Phone",
-        "description": "Look up customer by mobile phone at POS counter.",
+        "summary": "Search customer by phone (Consolidated alias)",
+        "description": "Look up customer by mobile phone at POS counter.\n[Consolidated]: Prefer GET /api/customers?phone={phone}.",
         "operationId": "search_customer_by_phone_api_customers_search_get",
+        "deprecated": true,
         "parameters": [
           {
             "name": "phone",
@@ -778,75 +806,12 @@
         }
       }
     },
-    "/api/sales/invoices": {
-      "get": {
-        "tags": [
-          "6. Sales & POS Billing"
-        ],
-        "summary": "List Sales",
-        "description": "List sales invoices.",
-        "operationId": "list_sales_api_sales_invoices_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "tags": [
-          "6. Sales & POS Billing"
-        ],
-        "summary": "Create Sales Invoice",
-        "description": "POS Billing API:\nSupports multi-item or single-item sales.\nCalculates line total via formula: Total = (Price + Tax) * Quantity.\nLogs Stock Ledger OUT movement.",
-        "operationId": "create_sales_invoice_api_sales_invoices_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SalesInvoiceCreate"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ]
-      }
-    },
     "/api/sales": {
       "get": {
         "tags": [
           "6. Sales & POS Billing"
         ],
-        "summary": "List Sales",
+        "summary": "List customer sales invoices",
         "description": "List sales invoices.",
         "operationId": "list_sales_api_sales_get",
         "responses": {
@@ -927,7 +892,7 @@
         "tags": [
           "6. Sales & POS Billing"
         ],
-        "summary": "Create Sales Invoice",
+        "summary": "Create customer sales invoice (decreases stock & collects GST)",
         "description": "POS Billing API:\nSupports multi-item or single-item sales.\nCalculates line total via formula: Total = (Price + Tax) * Quantity.\nLogs Stock Ledger OUT movement.",
         "operationId": "create_sales_invoice_api_sales_invoice_post",
         "requestBody": {
@@ -970,9 +935,9 @@
     "/api/sales/{invoice_no}/return": {
       "post": {
         "tags": [
-          "5. Sales & Invoicing"
+          "6. Sales & POS Billing"
         ],
-        "summary": "Process Sales Return",
+        "summary": "Process product return, refund & audit stock restoration",
         "description": "Process product return and refund for an original sales invoice (Workflow D).\nValidates items against original invoice, calculates refund amounts,\nlogs stock return into the audit ledger, and records the refund.",
         "operationId": "process_sales_return_api_sales__invoice_no__return_post",
         "security": [
@@ -1023,14 +988,15 @@
         }
       }
     },
-    "/api/invoice/print": {
+    "/api/sales/print": {
       "post": {
         "tags": [
+          "6. Sales & POS Billing",
           "7. Commercial Print Invoice"
         ],
-        "summary": "Print Invoice Custom",
+        "summary": "Commercial printable sales tax invoice generator",
         "description": "Renders commercial printable invoice from given JSON payload.\nFeatures: Item Name, Item Description (Optional), Quantity, Price, Tax, and Total = (Price + Tax) * Quantity.",
-        "operationId": "print_invoice_custom_api_invoice_print_post",
+        "operationId": "print_invoice_custom_api_sales_print_post",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1065,14 +1031,102 @@
         }
       }
     },
-    "/api/invoice/{invoice_no}/print": {
+    "/api/sales/{invoice_no}/print": {
       "get": {
         "tags": [
+          "6. Sales & POS Billing",
           "7. Commercial Print Invoice"
         ],
-        "summary": "Print Existing Sales Invoice",
+        "summary": "Print official sales invoice by invoice number",
         "description": "Look up an existing sales invoice by number and render its printable commercial invoice.",
-        "operationId": "print_existing_sales_invoice_api_invoice__invoice_no__print_get",
+        "operationId": "print_existing_sales_invoice_api_sales__invoice_no__print_get",
+        "parameters": [
+          {
+            "name": "invoice_no",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Invoice No"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/purchases/print": {
+      "post": {
+        "tags": [
+          "4. Supplier & Purchases",
+          "7. Commercial Print Invoice"
+        ],
+        "summary": "Print Purchase Invoice Custom",
+        "description": "Renders commercial printable purchase bill from given JSON payload.\nTable columns:\n# | Item name | Item description(Optional) | quantity | price | tax | (total=(price+tax)*quantity)",
+        "operationId": "print_purchase_invoice_custom_api_purchases_print_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PrintPurchaseInvoiceRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/html": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/purchases/{invoice_no}/print": {
+      "get": {
+        "tags": [
+          "4. Supplier & Purchases",
+          "7. Commercial Print Invoice"
+        ],
+        "summary": "Print Existing Purchase Invoice",
+        "description": "Look up an existing purchase invoice by invoice number and render printable purchase bill.\nTable columns:\n# | Item name | Item description(Optional) | quantity | price | tax | (total=(price+tax)*quantity)",
+        "operationId": "print_existing_purchase_invoice_api_purchases__invoice_no__print_get",
         "parameters": [
           {
             "name": "invoice_no",
@@ -1113,7 +1167,7 @@
         "tags": [
           "8. Tax & Financial Reports"
         ],
-        "summary": "Get Gst Report",
+        "summary": "GSTR reconciliation alias",
         "description": "Step 4 of Blueprint:\nGovernment GST API & Input Tax Credit (ITC) Engine.\nReconciles GSTR-1 Output Tax vs GSTR-2B Input Tax Credit, calculating net cash tax payable and ITC carried forward.",
         "operationId": "get_gst_report_api_gst_reconciliation_get",
         "responses": {
@@ -1125,7 +1179,8 @@
               }
             }
           }
-        }
+        },
+        "deprecated": true
       }
     },
     "/api/gst/report": {
@@ -1133,7 +1188,7 @@
         "tags": [
           "8. Tax & Financial Reports"
         ],
-        "summary": "Get Gst Report",
+        "summary": "GST Input Tax Credit reconciliation (GSTR-1 vs GSTR-2B)",
         "description": "Step 4 of Blueprint:\nGovernment GST API & Input Tax Credit (ITC) Engine.\nReconciles GSTR-1 Output Tax vs GSTR-2B Input Tax Credit, calculating net cash tax payable and ITC carried forward.",
         "operationId": "get_gst_report_api_gst_report_get",
         "responses": {
@@ -1153,9 +1208,10 @@
         "tags": [
           "8. Tax & Financial Reports"
         ],
-        "summary": "Get Pnl Statement",
+        "summary": "P&L statement alias",
         "description": "Step 5 of Blueprint:\nERPNext Profit & Loss Statement:\nRevenue, Cost of Goods Sold (COGS), Gross Profit, Operating Expenses, and Net Operating Profit.",
         "operationId": "get_pnl_statement_api_reports_pnl_get",
+        "deprecated": true,
         "parameters": [
           {
             "name": "operating_expenses",
@@ -1195,7 +1251,7 @@
         "tags": [
           "8. Tax & Financial Reports"
         ],
-        "summary": "Get Pnl Statement",
+        "summary": "Profit & Loss accounting statement",
         "description": "Step 5 of Blueprint:\nERPNext Profit & Loss Statement:\nRevenue, Cost of Goods Sold (COGS), Gross Profit, Operating Expenses, and Net Operating Profit.",
         "operationId": "get_pnl_statement_api_pnl_get",
         "parameters": [
@@ -1252,12 +1308,38 @@
         }
       }
     },
+    "/api/sync/trigger": {
+      "post": {
+        "tags": [
+          "9. Cloud DW Pipeline"
+        ],
+        "summary": "ETL trigger alias",
+        "description": "Step 2 of Blueprint:\nTriggers incremental ETL pipeline synchronizing operational collections to BigQuery dataset `jompoi_reporting`.",
+        "operationId": "trigger_etl_sync_api_sync_trigger_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "deprecated": true,
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/api/etl/sync": {
       "post": {
         "tags": [
           "9. Cloud DW Pipeline"
         ],
-        "summary": "Trigger Etl Sync",
+        "summary": "Trigger BigQuery Cloud DW ETL sync pipeline",
         "description": "Step 2 of Blueprint:\nTriggers incremental ETL pipeline synchronizing operational collections to BigQuery dataset `jompoi_reporting`.",
         "operationId": "trigger_etl_sync_api_etl_sync_post",
         "responses": {
@@ -1275,6 +1357,200 @@
             "HTTPBearer": []
           }
         ]
+      }
+    },
+    "/api/bigquery/items": {
+      "post": {
+        "tags": [
+          "10. Google BigQuery Integration"
+        ],
+        "summary": "Add item to Google BigQuery items table",
+        "description": "Operation 1: Add an item from the Server Application into Google BigQuery.\nInserts or streams the item record directly into BigQuery `items` table.",
+        "operationId": "add_item_to_bigquery_api_bigquery_items_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ItemCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "10. Google BigQuery Integration"
+        ],
+        "summary": "List items from Google BigQuery items table",
+        "description": "Operation 2: List items from Google BigQuery in the Server Application.\nExecutes SELECT query against BigQuery dataset and maps records to Item models.",
+        "operationId": "list_items_from_bigquery_api_bigquery_items_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bigquery/purchases": {
+      "post": {
+        "tags": [
+          "10. Google BigQuery Integration"
+        ],
+        "summary": "Add purchase invoice to Google BigQuery purchases table",
+        "description": "Operation 3: Add a purchase invoice from the Server Application into Google BigQuery.\nTransfers full invoice header and line items into BigQuery `purchases` table.",
+        "operationId": "add_purchase_to_bigquery_api_bigquery_purchases_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PurchaseInvoiceCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "10. Google BigQuery Integration"
+        ],
+        "summary": "List purchase invoices from Google BigQuery purchases table",
+        "description": "Operation 4: List purchase invoices from Google BigQuery in the Server Application.\nRetrieves purchase line item records, aggregates them by invoice number,\nand returns reconstructed purchase invoices with full line item details.",
+        "operationId": "list_purchases_from_bigquery_api_bigquery_purchases_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bigquery/table-status": {
+      "get": {
+        "tags": [
+          "10. Google BigQuery Integration"
+        ],
+        "summary": "Get BigQuery tables status and schema verification",
+        "description": "Inspect and verify that Google Cloud BigQuery dataset `jompoi_reporting`\nand tables `items` and `purchases` are created with correct schemas.",
+        "operationId": "get_bigquery_table_status_api_bigquery_table_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
       }
     },
     "/api/health": {
@@ -1419,6 +1695,19 @@
             "minimum": 0.0,
             "title": "Min Stock Alert",
             "default": 10.0
+          },
+          "opening_stock": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Opening Stock",
+            "default": 0.0
           }
         },
         "type": "object",
@@ -1578,7 +1867,7 @@
             "type": "string",
             "title": "Customer Name"
           },
-          "customer_address": {
+          "customer_city": {
             "anyOf": [
               {
                 "type": "string"
@@ -1587,7 +1876,7 @@
                 "type": "null"
               }
             ],
-            "title": "Customer Address"
+            "title": "Customer City"
           },
           "items": {
             "items": {
@@ -1605,6 +1894,101 @@
           "items"
         ],
         "title": "PrintInvoiceRequest"
+      },
+      "PrintPurchaseInvoiceItem": {
+        "properties": {
+          "item_name": {
+            "type": "string",
+            "title": "Item Name"
+          },
+          "item_description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Item Description"
+          },
+          "quantity": {
+            "type": "number",
+            "exclusiveMinimum": 0.0,
+            "title": "Quantity"
+          },
+          "price": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Price"
+          },
+          "tax_percent": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Tax Percent",
+            "default": 5.0
+          }
+        },
+        "type": "object",
+        "required": [
+          "item_name",
+          "quantity",
+          "price"
+        ],
+        "title": "PrintPurchaseInvoiceItem"
+      },
+      "PrintPurchaseInvoiceRequest": {
+        "properties": {
+          "invoice_no": {
+            "type": "string",
+            "title": "Invoice No"
+          },
+          "invoice_date": {
+            "type": "string",
+            "title": "Invoice Date"
+          },
+          "vendor_name": {
+            "type": "string",
+            "title": "Vendor Name"
+          },
+          "vendor_gstin": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendor Gstin"
+          },
+          "vendor_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vendor Address"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/PrintPurchaseInvoiceItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "invoice_no",
+          "invoice_date",
+          "vendor_name",
+          "items"
+        ],
+        "title": "PrintPurchaseInvoiceRequest"
       },
       "PurchaseInvoiceCreate": {
         "properties": {
@@ -1763,17 +2147,6 @@
           "customer_city": {
             "type": "string",
             "title": "Customer City"
-          },
-          "customer_address": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Customer Address"
           },
           "payment_mode": {
             "type": "string",

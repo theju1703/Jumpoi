@@ -1533,6 +1533,26 @@
         }
       }
     },
+    "/api/bigquery/table-status": {
+      "get": {
+        "tags": [
+          "10. Google BigQuery Integration"
+        ],
+        "summary": "Get BigQuery tables status and schema verification",
+        "description": "Inspect and verify that Google Cloud BigQuery dataset `jompoi_reporting`\nand tables `items` and `purchases` are created with correct schemas.",
+        "operationId": "get_bigquery_table_status_api_bigquery_table_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "tags": [

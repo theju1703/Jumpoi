@@ -25,6 +25,7 @@ fun DashboardScreen(
     onNavigateToPurchases: () -> Unit,
     onNavigateToGst: () -> Unit,
     onNavigateToPnl: () -> Unit,
+    onNavigateToBigQuery: () -> Unit = {},
     onLogout: () -> Unit
 ) {
     val coroutineScope = rememberCoroutineScope()
@@ -185,6 +186,16 @@ fun DashboardScreen(
                     tag = "FINANCE",
                     accentColor = AccentBlueDark,
                     onClick = onNavigateToPnl
+                )
+            }
+
+            item {
+                ActionCard(
+                    title = "Google BigQuery Data Warehouse",
+                    description = "GUI add item to BigQuery table, list warehouse records & live cloud sync",
+                    tag = "BIGQUERY DW",
+                    accentColor = AccentBlue,
+                    onClick = onNavigateToBigQuery
                 )
             }
         }

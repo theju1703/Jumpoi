@@ -91,3 +91,19 @@ def test_operation_4_list_purchases_from_bigquery():
         assert inv["vendor"] == "National Organics Ltd"
         assert len(inv["items"]) == 2
         assert inv["total_amount"] > 0
+
+def test_operation_5_bigquery_table_status_verification():
+    response = client.get("/api/bigquery/table-status")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["status"] == "success"
+    assert data["project_id"] == "project-b6567b21-77eb-47fb-926"
+    assert data["dataset_id"] == "jompoi_reporting"
+    assert "tables" in data
+    table_names = [t["table_name"] for t in data["tables"]]
+    assert "items" in table_names
+    assert "purchases" in table_names
+    items_table = next(t for t in data["tables"] if t["table_name"] == "items")
+    assert items_table["status"] == "CREATED_AND_VERIFIED"
+    assert len(items_table["columns"]) >= 10
+

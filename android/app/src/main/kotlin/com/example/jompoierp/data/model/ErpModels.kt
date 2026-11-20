@@ -150,3 +150,26 @@ data class Customer(
     val phone: String,
     val address: String? = null
 )
+
+@Serializable
+data class BigQueryItemsResponse(
+    val source: String = "Google BigQuery Data Warehouse",
+    val dataset: String = "project-b6567b21-77eb-47fb-926.jompoi_reporting.items",
+    val count: Int = 0,
+    val items: List<Item> = emptyList()
+)
+
+@Serializable
+data class BigQueryItemCreateRequest(
+    val item_code: String,
+    val name: String,
+    val brand: String = "",
+    val category: String = "",
+    val price: Double = 0.0,
+    val cost_price: Double? = null,
+    val gst_percent: Double = 5.0,
+    val min_stock_alert: Double = 10.0,
+    val barcode: String? = null,
+    val description: String? = null
+)
+

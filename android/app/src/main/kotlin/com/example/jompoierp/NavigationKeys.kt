@@ -31,3 +31,7 @@ data object GstReportNav : NavKey
 
 @Serializable
 data object PnlNav : NavKey
+
+@Serializable
+data object BigQueryNav : NavKey
+

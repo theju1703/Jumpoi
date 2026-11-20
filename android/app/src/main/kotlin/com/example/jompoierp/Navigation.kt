@@ -30,6 +30,7 @@ fun MainNavigation() {
                         onNavigateToPurchases = { backStack.add(PurchasesNav) },
                         onNavigateToGst = { backStack.add(GstReportNav) },
                         onNavigateToPnl = { backStack.add(PnlNav) },
+                        onNavigateToBigQuery = { backStack.add(BigQueryNav) },
                         onLogout = { isLoggedIn = false }
                     )
                 }
@@ -73,6 +74,12 @@ fun MainNavigation() {
 
                 entry<PnlNav> {
                     PnlScreen(
+                        onNavigateBack = { backStack.removeLastOrNull() }
+                    )
+                }
+
+                entry<BigQueryNav> {
+                    BigQueryScreen(
                         onNavigateBack = { backStack.removeLastOrNull() }
                     )
                 }
