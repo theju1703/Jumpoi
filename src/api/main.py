@@ -12,6 +12,7 @@ from src.config import MONGO_URI, MONGO_DB_NAME, DUMMY_DATA_DIR, BASE_DIR, BQ_PR
 from src.etl.transformer import flatten_document
 from src.etl.sync_manager import SyncStateManager
 from src.etl.bq_loader import BigQueryLoader
+from src.etl.bq_sync_service import BigQuerySyncService
 from src.gst_engine.gst_reconciliation import GSTReconciliationEngine
 from src.erp_integration.erpnext_sync import ERPNextSyncService
 from src.local_warehouse.sqlite_bq_emulator import LocalWarehouseEmulator
@@ -209,6 +210,7 @@ class PrintInvoiceRequest(BaseModel):
 
 _IN_MEMORY_STORE: Dict[str, List[Dict[str, Any]]] = {}
 _BQ_WAREHOUSE_EMULATOR: Optional[LocalWarehouseEmulator] = None
+_BQ_SYNC_SERVICE: BigQuerySyncService = BigQuerySyncService()
 
 def get_warehouse_backend() -> Any:
     """
@@ -438,26 +440,9 @@ def create_item(item: ItemCreate, user: Dict[str, Any] = Depends(require_roles(U
     new_doc["updated_at"] = now
     save_collection_doc("items", new_doc)
 
-    # Replicate into BigQuery warehouse
-    try:
-        wh = get_warehouse_backend()
-        wh.insert_rows("items", [{
-            "_id": new_doc["_id"],
-            "item_code": new_doc["item_code"],
-            "name": new_doc["name"],
-            "brand": new_doc.get("brand", ""),
-            "category": new_doc.get("category", ""),
-            "price": float(new_doc.get("price", 0.0)),
-            "cost_price": float(new_doc.get("cost_price", 0.0) or (new_doc.get("price", 0.0) * 0.75)),
-            "gst_percent": float(new_doc.get("gst_percent", 5.0)),
-            "min_stock_alert": float(new_doc.get("min_stock_alert", 10.0)),
-            "barcode": new_doc.get("barcode", ""),
-            "description": new_doc.get("description", ""),
-            "created_at": new_doc["created_at"],
-            "updated_at": new_doc["updated_at"]
-        }])
-    except Exception:
-        pass
+    # Immediate streaming replication into BigQuery warehouse
+    wh = get_warehouse_backend()
+    bq_sync_result = _BQ_SYNC_SERVICE.sync_item(new_doc, wh)
 
     # Automatic initial stock increment if opening_stock is specified
     if item.opening_stock and item.opening_stock > 0:
@@ -477,7 +462,11 @@ def create_item(item: ItemCreate, user: Dict[str, Any] = Depends(require_roles(U
         }
         save_collection_doc("stock_ledger", stock_entry)
 
-    return {"message": "Item registered successfully", "item": new_doc}
+    return {
+        "message": "Item registered successfully",
+        "item": new_doc,
+        "bigquery_sync": bq_sync_result
+    }
 
 @app.put("/api/items/{item_code}", tags=["2. Product Catalog"])
 def update_item(item_code: str, update: ItemUpdate, user: Dict[str, Any] = Depends(require_roles(UserRole.ADMIN, UserRole.STORE_MANAGER))):
@@ -704,39 +693,16 @@ def create_purchase_invoice(pur: PurchaseInvoiceCreate, user: Dict[str, Any] = D
     for se in stock_entries:
         save_collection_doc("stock_ledger", se)
 
-    # Replicate purchase line items into BigQuery warehouse
-    try:
-        wh = get_warehouse_backend()
-        bq_rows = []
-        for idx, it in enumerate(purchase_items):
-            bq_rows.append({
-                "_id": f"{purchase_doc['invoice_no']}-{idx}",
-                "invoice_no": purchase_doc["invoice_no"],
-                "invoice_date": purchase_doc["invoice_date"],
-                "vendor": purchase_doc["vendor"],
-                "vendor_gstin": purchase_doc.get("vendor_gstin", "33AAAAA0000A1Z5"),
-                "item_code": it["item_code"],
-                "item_name": it["item_name"],
-                "item_description": it.get("item_description", ""),
-                "quantity": float(it["quantity"]),
-                "rate": float(it["rate"]),
-                "net_amount": float(it["net_amount"]),
-                "gst_percent": float(it["gst_percent"]),
-                "gst_amount": float(it["gst_amount"]),
-                "total_amount": float(it["total_amount"]),
-                "itc_eligible": 1,
-                "created_at": purchase_doc["created_at"],
-                "updated_at": purchase_doc["updated_at"]
-            })
-        wh.insert_rows("purchases", bq_rows)
-    except Exception:
-        pass
+    # Immediate streaming replication of purchase line items into BigQuery warehouse
+    wh = get_warehouse_backend()
+    bq_sync_result = _BQ_SYNC_SERVICE.sync_purchase_invoice(purchase_doc, wh)
 
     return {
         "message": "Purchase invoice registered and stock IN logged",
         "purchase": purchase_doc,
         "invoice": purchase_doc,
-        "stock_ledger_entries": stock_entries
+        "stock_ledger_entries": stock_entries,
+        "bigquery_sync": bq_sync_result
     }
 
 # ---------------------------------------------------------------------------
@@ -1633,7 +1599,7 @@ def add_item_to_bigquery(item: ItemCreate, user: Dict[str, Any] = Depends(requir
     }
     
     wh = get_warehouse_backend()
-    res = wh.insert_rows("items", [row])
+    bq_sync_result = _BQ_SYNC_SERVICE.sync_item(row, wh)
     
     # Also save to master item repository if not exists
     existing = get_collection_data("items")
@@ -1644,7 +1610,8 @@ def add_item_to_bigquery(item: ItemCreate, user: Dict[str, Any] = Depends(requir
         "status": "success",
         "message": f"Item '{item.item_code}' successfully loaded into Google BigQuery",
         "bigquery_target": f"{BQ_PROJECT_ID}.{BQ_DATASET_ID}.items",
-        "bigquery_result": res,
+        "bigquery_result": bq_sync_result,
+        "bigquery_sync": bq_sync_result,
         "item": row
     }
 
@@ -1724,13 +1691,17 @@ def add_purchase_to_bigquery(pur: PurchaseInvoiceCreate, user: Dict[str, Any] = 
         })
     
     wh = get_warehouse_backend()
-    res = wh.insert_rows("purchases", bq_rows)
+    bq_sync_result = _BQ_SYNC_SERVICE.sync_purchase_invoice(pur.model_dump(), wh)
+
+    # Also persist to ERP purchase collection
+    save_collection_doc("purchase_invoice", pur.model_dump())
 
     return {
         "status": "success",
         "message": f"Purchase invoice '{pur.invoice_no}' ({len(bq_rows)} line items) successfully loaded into Google BigQuery",
         "bigquery_target": f"{BQ_PROJECT_ID}.{BQ_DATASET_ID}.purchases",
-        "bigquery_result": res,
+        "bigquery_result": bq_sync_result,
+        "bigquery_sync": bq_sync_result,
         "line_items_count": len(bq_rows),
         "invoice_no": pur.invoice_no
     }
@@ -1876,6 +1847,24 @@ def get_bigquery_table_status():
             }
         ]
     }
+
+@app.get("/api/bigquery/sync-status", tags=["10. Google BigQuery Integration"], summary="Get live BigQuery sync and outbox status")
+def get_bigquery_sync_status():
+    """
+    Returns real-time sync metrics, outbox queue health, active warehouse backend,
+    and row counts in BigQuery dataset `jompoi_reporting`.
+    """
+    wh = get_warehouse_backend()
+    return _BQ_SYNC_SERVICE.get_status(wh)
+
+@app.post("/api/bigquery/sync-outbox", tags=["10. Google BigQuery Integration"], summary="Retry and process pending BigQuery outbox items")
+def process_bigquery_outbox():
+    """
+    Retries any queued items that failed during transient warehouse errors.
+    Idempotent operation using unique entity primary keys.
+    """
+    wh = get_warehouse_backend()
+    return _BQ_SYNC_SERVICE.process_outbox(wh)
 
 # System Root & Health
 @app.get("/api/health", tags=["System"])

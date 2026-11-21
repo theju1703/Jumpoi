@@ -29,7 +29,7 @@ def test_operation_1_add_item_to_bigquery(auth_headers):
     data = response.json()
     assert data["status"] == "success"
     assert data["item"]["item_code"] == "BQ_ITEM_001"
-    assert data["bigquery_result"]["status"] in ["success", "skipped"]
+    assert data["bigquery_result"]["status"] in ["success", "skipped", "SYNCED"]
 
 def test_operation_2_list_items_from_bigquery():
     response = client.get("/api/bigquery/items")
@@ -73,7 +73,7 @@ def test_operation_3_add_purchase_to_bigquery(auth_headers):
     assert data["status"] == "success"
     assert data["invoice_no"] == "BQ-PUR-2026-999"
     assert data["line_items_count"] == 2
-    assert data["bigquery_result"]["status"] in ["success", "skipped"]
+    assert data["bigquery_result"]["status"] in ["success", "skipped", "SYNCED"]
 
 def test_operation_4_list_purchases_from_bigquery():
     response = client.get("/api/bigquery/purchases")
@@ -106,4 +106,72 @@ def test_operation_5_bigquery_table_status_verification():
     items_table = next(t for t in data["tables"] if t["table_name"] == "items")
     assert items_table["status"] == "CREATED_AND_VERIFIED"
     assert len(items_table["columns"]) >= 10
+
+def test_operation_6_api_items_immediate_sync_to_bigquery(auth_headers):
+    import time
+    code = f"SYNC_ITEM_{int(time.time() * 1000) % 100000}"
+    payload = {
+        "item_code": code,
+        "name": "Organic Almond Milk 1L",
+        "brand": "NutriLife",
+        "category": "Dairy Alternatives",
+        "price": 195.0,
+        "cost_price": 140.0,
+        "gst_percent": 5.0,
+        "min_stock_alert": 10.0,
+        "opening_stock": 25.0
+    }
+    response = client.post("/api/items", json=payload, headers=auth_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert "bigquery_sync" in data
+    assert data["bigquery_sync"]["status"] in ["SYNCED", "QUEUED_IN_OUTBOX"]
+    
+    # Verify in BigQuery items list
+    bq_res = client.get("/api/bigquery/items")
+    assert bq_res.status_code == 200
+    bq_codes = [i["item_code"] for i in bq_res.json()["items"]]
+    assert code in bq_codes
+
+def test_operation_7_api_purchases_immediate_sync_to_bigquery(auth_headers):
+    import time
+    inv_no = f"PUR-SYNC-{int(time.time() * 1000) % 100000}"
+    payload = {
+        "invoice_no": inv_no,
+        "invoice_date": "2026-11-20",
+        "vendor": "Agro Fresh Mart",
+        "vendor_gstin": "33AAACA9999Z1Z8",
+        "items": [
+            {
+                "item_code": "ITM001",
+                "item_name": "Basmati Rice 5kg",
+                "quantity": 50.0,
+                "rate": 140.0,
+                "gst_percent": 5.0
+            }
+        ]
+    }
+    response = client.post("/api/purchases/invoice", json=payload, headers=auth_headers)
+    assert response.status_code == 200
+    data = response.json()
+    assert "bigquery_sync" in data
+    assert data["bigquery_sync"]["status"] in ["SYNCED", "QUEUED_IN_OUTBOX"]
+    
+    # Verify in BigQuery purchases list
+    bq_res = client.get("/api/bigquery/purchases")
+    assert bq_res.status_code == 200
+    inv_nos = [i["invoice_no"] for i in bq_res.json()["invoices"]]
+    assert inv_no in inv_nos
+
+def test_operation_8_sync_status_and_outbox():
+    status_res = client.get("/api/bigquery/sync-status")
+    assert status_res.status_code == 200
+    status_data = status_res.json()
+    assert "warehouse_backend" in status_data
+    assert "tables" in status_data
+    assert "outbox" in status_data
+
+    outbox_res = client.post("/api/bigquery/sync-outbox")
+    assert outbox_res.status_code == 200
+    assert outbox_res.json()["status"] in ["empty", "completed"]
 

@@ -410,9 +410,133 @@
 
       <!-- TAB 5: PURCHASE INVOICES (WITH PER-ITEM GST) -->
       <section id="tab-purchases" class="tab-pane">
+        <!-- Record Vendor Procurement Bill Form Card -->
+        <div id="purchase-form-card" class="bq-form-container" style="display: block; margin-bottom: 1.5rem; border: 1px solid var(--accent-blue);">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+            <div>
+              <h3 style="font-size: 1.1rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; color: #fff;">
+                <i class="fa-solid fa-file-invoice-dollar" style="color: var(--accent-blue);"></i> Record Vendor Procurement Bill (Input Tax Credit Sourced)
+              </h3>
+              <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.2rem;">
+                Save procurement bill in ERP & immediately stream line items to BigQuery (<code style="color: #38bdf8;">POST /api/purchases/invoice</code>).
+              </p>
+            </div>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn btn-primary btn-sm" id="btn-purchase-quick-demo">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> 1-Click: Demo Purchase Bill
+              </button>
+              <button class="btn btn-secondary btn-sm" id="btn-purchase-clear-form">
+                <i class="fa-solid fa-rotate-left"></i> Clear
+              </button>
+            </div>
+          </div>
+
+          <form id="form-add-purchase" onsubmit="return false;" style="margin-top: 1rem;">
+            <div class="bq-grid-form">
+              <div class="form-group">
+                <label>Invoice / Bill No *</label>
+                <input type="text" id="pur-input-no" placeholder="e.g. PUR-2026-004" value="PUR-2026-004" required />
+              </div>
+              <div class="form-group">
+                <label>Invoice Date *</label>
+                <input type="date" id="pur-input-date" required />
+              </div>
+              <div class="form-group" style="grid-column: span 2;">
+                <label>Vendor / Supplier *</label>
+                <select id="pur-input-vendor">
+                  <option value="KR Agro Supplies" data-gstin="33AABCK1234A1Z5">KR Agro Supplies (Chennai)</option>
+                  <option value="Adani Wilmar Dist" data-gstin="33AABCA5678B1Z2">Adani Wilmar Dist (Madurai)</option>
+                  <option value="Tata Consumer Products" data-gstin="33AAACT0001B1Z9">Tata Consumer Products (Coimbatore)</option>
+                  <option value="Aavin Dairy Cooperative" data-gstin="33AAACA0002C1Z4">Aavin Dairy Cooperative (Chennai)</option>
+                  <option value="Fortune Agri Products" data-gstin="33AAACF0003D1Z6">Fortune Agri Products</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Vendor GSTIN</label>
+                <input type="text" id="pur-input-gstin" value="33AABCK1234A1Z5" />
+              </div>
+              <div class="form-group">
+                <label>Item SKU / Code *</label>
+                <select id="pur-input-item-code">
+                  <option value="ITM001" data-name="Basmati Rice 5kg" data-rate="380.0" data-gst="5">ITM001 - Basmati Rice 5kg</option>
+                  <option value="ITM002" data-name="Sunflower Oil 1L" data-rate="110.0" data-gst="5">ITM002 - Sunflower Oil 1L</option>
+                  <option value="ITM003" data-name="Toor Dal 1kg" data-rate="130.0" data-gst="0">ITM003 - Toor Dal 1kg</option>
+                  <option value="ITM004" data-name="Milk 500ml" data-rate="20.0" data-gst="0">ITM004 - Milk 500ml</option>
+                  <option value="ITM005" data-name="Chakki Atta 5kg" data-rate="200.0" data-gst="5">ITM005 - Chakki Atta 5kg</option>
+                  <option value="ITM006" data-name="Organic Filter Coffee 500g" data-rate="180.0" data-gst="5">ITM006 - Organic Filter Coffee</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Quantity *</label>
+                <input type="number" id="pur-input-qty" value="50" min="1" step="1" required />
+              </div>
+              <div class="form-group">
+                <label>Purchase Rate ₹ (excl. tax) *</label>
+                <input type="number" id="pur-input-rate" value="380.0" min="0" step="0.5" required />
+              </div>
+              <div class="form-group">
+                <label>Input GST % *</label>
+                <select id="pur-input-gst">
+                  <option value="0">0% (Nil)</option>
+                  <option value="5" selected>5%</option>
+                  <option value="12">12%</option>
+                  <option value="18">18%</option>
+                  <option value="28">28%</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Summary & Actions Bar -->
+            <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.85rem 1.25rem; margin-top: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+              <div style="display: flex; gap: 1.5rem; flex-wrap: wrap;">
+                <div>
+                  <small style="color: var(--text-secondary); text-transform: uppercase; font-size: 0.72rem; display: block;">Net Amount</small>
+                  <strong id="pur-sum-net" style="font-size: 1.1rem; color: #fff;">₹19,000.00</strong>
+                </div>
+                <div>
+                  <small style="color: var(--text-secondary); text-transform: uppercase; font-size: 0.72rem; display: block;">Input Tax Credit (ITC)</small>
+                  <strong id="pur-sum-gst" style="font-size: 1.1rem; color: var(--accent-emerald);">₹950.00 (5%)</strong>
+                </div>
+                <div>
+                  <small style="color: var(--text-secondary); text-transform: uppercase; font-size: 0.72rem; display: block;">Gross Bill Total</small>
+                  <strong id="pur-sum-total" style="font-size: 1.2rem; color: #60a5fa;">₹19,950.00</strong>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <label style="font-size: 0.85rem; color: var(--accent-emerald); display: flex; align-items: center; gap: 0.4rem; cursor: pointer;">
+                  <input type="checkbox" id="pur-input-itc" checked style="accent-color: var(--accent-emerald);" />
+                  <strong>ITC Eligible</strong>
+                </label>
+                <button class="btn btn-success" id="btn-submit-purchase" style="padding: 0.65rem 1.25rem;">
+                  <i class="fa-solid fa-cloud-arrow-up"></i> Record Bill & Sync to BigQuery
+                </button>
+              </div>
+            </div>
+          </form>
+
+          <!-- Status alert box -->
+          <div id="purchase-status-alert" class="alert-box alert-success" style="display: none;">
+            <div id="purchase-status-alert-content"></div>
+            <button onclick="document.getElementById('purchase-status-alert').style.display='none'" style="background:transparent; border:none; color:inherit; cursor:pointer; font-size:1.1rem;">&times;</button>
+          </div>
+        </div>
+
         <div class="table-container">
-          <div class="table-header">
-            <h3><i class="fa-solid fa-truck"></i> Vendor Purchase Invoices (Input Tax Credit Sourced)</h3>
+          <div class="table-header" style="flex-wrap: wrap; gap: 1rem;">
+            <div>
+              <h3><i class="fa-solid fa-truck"></i> Vendor Purchase Invoices (Input Tax Credit Sourced)</h3>
+              <p style="font-size: 0.8rem; color: var(--text-secondary); margin: 0.2rem 0 0 0;">
+                All vendor procurement bills recorded in ERP & replicated to Google BigQuery.
+              </p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+              <span id="purchases-count-badge" class="badge badge-success" style="font-size: 0.85rem; padding: 0.45rem 0.9rem; border-radius: 20px;">
+                2 Invoices
+              </span>
+              <button class="btn btn-secondary btn-sm" id="btn-refresh-purchases">
+                <i class="fa-solid fa-arrows-rotate"></i> Refresh
+              </button>
+            </div>
           </div>
           <table class="data-table" id="table-purchases">
             <thead>
@@ -444,7 +568,7 @@
             <div class="kpi-icon blue"><i class="fa-solid fa-boxes-stacked"></i></div>
             <div class="kpi-data">
               <span class="kpi-label">Total SKUs</span>
-              <h3 id="stat-total-items">4 Items</h3>
+              <h3 id="stat-total-items">5 Items</h3>
               <span class="kpi-sub neutral">Master Catalog</span>
             </div>
           </div>
@@ -460,7 +584,7 @@
             <div class="kpi-icon purple"><i class="fa-solid fa-circle-check"></i></div>
             <div class="kpi-data">
               <span class="kpi-label">In-Stock SKUs</span>
-              <h3 id="stat-in-stock">4 SKUs</h3>
+              <h3 id="stat-in-stock">5 SKUs</h3>
               <span class="kpi-sub positive">Available for Billing</span>
             </div>
           </div>
@@ -474,6 +598,90 @@
           </div>
         </div>
 
+        <!-- Add Master Item Card (Collapsible) -->
+        <div id="master-item-form-card" class="bq-form-container" style="display: none; margin-bottom: 1.5rem; border: 1px solid var(--accent-emerald);">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+            <div>
+              <h3 style="font-size: 1.1rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; color: #fff;">
+                <i class="fa-solid fa-circle-plus" style="color: var(--accent-emerald);"></i> Register New Master Item (Auto-Syncs to BigQuery)
+              </h3>
+              <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.2rem;">
+                Adds product to ERP master catalog and immediately replicates to BigQuery table <code style="color: #38bdf8;">items</code>.
+              </p>
+            </div>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn btn-primary btn-sm" id="btn-master-item-quick-demo">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> 1-Click: Demo Product
+              </button>
+              <button class="btn btn-secondary btn-sm" id="btn-master-item-clear">
+                <i class="fa-solid fa-rotate-left"></i> Clear
+              </button>
+            </div>
+          </div>
+
+          <form id="form-master-add-item" onsubmit="return false;" style="margin-top: 1rem;">
+            <div class="bq-grid-form">
+              <div class="form-group">
+                <label>Item Code *</label>
+                <input type="text" id="master-input-code" placeholder="e.g. ITM007" value="ITM007" required />
+              </div>
+              <div class="form-group" style="grid-column: span 2;">
+                <label>Item Name *</label>
+                <input type="text" id="master-input-name" placeholder="e.g. Himalayan Rock Salt 1kg" value="Himalayan Rock Salt 1kg" required />
+              </div>
+              <div class="form-group">
+                <label>Brand</label>
+                <input type="text" id="master-input-brand" placeholder="e.g. Tata Salt" value="Tata Salt" />
+              </div>
+              <div class="form-group">
+                <label>Category</label>
+                <input type="text" id="master-input-category" placeholder="e.g. Grocery & Spices" value="Grocery & Spices" />
+              </div>
+              <div class="form-group">
+                <label>Retail Price (₹) *</label>
+                <input type="number" id="master-input-price" value="110.0" step="0.5" min="0" required />
+              </div>
+              <div class="form-group">
+                <label>Cost Price (₹)</label>
+                <input type="number" id="master-input-cost" value="85.0" step="0.5" min="0" />
+              </div>
+              <div class="form-group">
+                <label>GST Rate % *</label>
+                <select id="master-input-gst">
+                  <option value="0">0% (Nil)</option>
+                  <option value="5" selected>5%</option>
+                  <option value="12">12%</option>
+                  <option value="18">18%</option>
+                  <option value="28">28%</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Initial Opening Stock (Units)</label>
+                <input type="number" id="master-input-opening" value="30" min="0" />
+              </div>
+              <div class="form-group">
+                <label>Min Alert Qty</label>
+                <input type="number" id="master-input-alert" value="10" min="1" />
+              </div>
+              <div class="form-group">
+                <label>Barcode</label>
+                <input type="text" id="master-input-barcode" value="890123456007" />
+              </div>
+            </div>
+
+            <div style="margin-top: 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+              <button class="btn btn-success" id="btn-submit-master-item" style="padding: 0.65rem 1.25rem;">
+                <i class="fa-solid fa-cloud-arrow-up"></i> Save Item & Sync to BigQuery
+              </button>
+            </div>
+          </form>
+
+          <div id="master-item-status-alert" class="alert-box alert-success" style="display: none;">
+            <div id="master-item-status-alert-content"></div>
+            <button onclick="document.getElementById('master-item-status-alert').style.display='none'" style="background:transparent; border:none; color:inherit; cursor:pointer; font-size:1.1rem;">&times;</button>
+          </div>
+        </div>
+
         <div class="table-container">
           <div class="table-header" style="flex-wrap: wrap; gap: 1rem;">
             <div>
@@ -482,11 +690,14 @@
                 Live inventory tracking: Stock increases upon vendor purchase, decreases upon POS customer sale.
               </p>
             </div>
-            <!-- Live Search & Filter Bar -->
+            <!-- Live Search, Filter Bar & Add Button -->
             <div style="display: flex; gap: 0.75rem; flex-wrap: wrap; align-items: center;">
+              <button class="btn btn-primary btn-sm" id="btn-toggle-master-item-form">
+                <i class="fa-solid fa-plus"></i> Add Master Item
+              </button>
               <div style="position: relative;">
                 <input type="text" id="item-search-filter" placeholder="🔍 Search item name, code (ITM001)..." 
-                       style="padding: 0.5rem 0.75rem; border-radius: 6px; background: #0f172a; color: #fff; border: 1px solid #334155; font-size: 0.85rem; width: 280px;" />
+                       style="padding: 0.5rem 0.75rem; border-radius: 6px; background: #0f172a; color: #fff; border: 1px solid #334155; font-size: 0.85rem; width: 250px;" />
               </div>
               <select id="item-stock-filter" style="padding: 0.5rem 0.75rem; border-radius: 6px; background: #0f172a; color: #fff; border: 1px solid #334155; font-size: 0.85rem;">
                 <option value="ALL">All Items</option>
@@ -715,6 +926,100 @@ ORDER BY created_at DESC;</code></pre>
               <!-- Dynamically populated from BigQuery API -->
             </tbody>
           </table>
+        </div>
+
+        <!-- Section C: Live Purchase Invoices in Google BigQuery (GUI Table) -->
+        <div class="table-container" style="margin-top: 2rem;">
+          <div class="table-header" style="flex-wrap: wrap; gap: 1rem;">
+            <div>
+              <h3 style="font-size: 1.1rem;"><i class="fa-solid fa-truck" style="color: #60a5fa;"></i> Google BigQuery Purchase Invoices Warehouse (<code style="color: #38bdf8; font-size: 0.9rem;">GET /api/bigquery/purchases</code>)</h3>
+              <p style="font-size: 0.8rem; color: var(--text-secondary); margin: 0.2rem 0 0 0;">
+                Live procurement invoices queried directly from BigQuery dataset <code style="color: #60a5fa;">project-b6567b21-77eb-47fb-926.jompoi_reporting.purchases</code>.
+              </p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+              <span id="bq-purchases-count-badge" class="badge-bq" style="font-size: 0.85rem; padding: 0.45rem 0.9rem; border-radius: 20px; font-weight: 700;">
+                2 Invoices in BigQuery
+              </span>
+              <button class="btn btn-primary btn-sm" id="btn-bq-quick-purchase">
+                <i class="fa-solid fa-wand-magic-sparkles"></i> 1-Click: Demo Purchase Sync
+              </button>
+              <button class="btn btn-secondary btn-sm" id="btn-bq-refresh-purchases">
+                <i class="fa-solid fa-arrows-rotate"></i> Refresh from BigQuery
+              </button>
+            </div>
+          </div>
+
+          <!-- Alert box for BigQuery purchases -->
+          <div id="bq-purchase-alert" class="alert-box alert-success" style="display: none; margin-bottom: 1rem;">
+            <div id="bq-purchase-alert-content"></div>
+            <button onclick="document.getElementById('bq-purchase-alert').style.display='none'" style="background:transparent; border:none; color:inherit; cursor:pointer; font-size:1.1rem;">&times;</button>
+          </div>
+
+          <table class="data-table" id="table-bq-purchases">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Bill No</th>
+                <th>Date</th>
+                <th>Vendor</th>
+                <th>Vendor GSTIN</th>
+                <th>Items Breakdown</th>
+                <th>Net Amount (₹)</th>
+                <th>Input Tax Credit (₹)</th>
+                <th>Gross Total (₹)</th>
+                <th>ITC Status</th>
+                <th>BigQuery DW Status</th>
+              </tr>
+            </thead>
+            <tbody id="table-bq-purchases-body">
+              <!-- Dynamically populated from BigQuery API -->
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Section D: Live BigQuery Cloud Console Verification Hub -->
+        <div class="bq-hero-card" style="margin-top: 2rem; border-color: var(--accent-emerald);">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+            <div>
+              <div style="display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem;">
+                <span class="badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; font-weight: 700;"><i class="fa-solid fa-circle-check"></i> Client Verification Hub</span>
+                <span class="badge" style="background: rgba(59, 130, 246, 0.2); color: #60a5fa;">Google BigQuery Web Console</span>
+              </div>
+              <h3 style="font-size: 1.15rem; font-weight: 700; color: #fff;">Direct Google BigQuery Website Verification</h3>
+              <p style="font-size: 0.82rem; color: var(--text-secondary); margin-top: 0.25rem;">
+                To view newly added items and purchase invoices directly on the Google Cloud BigQuery website, execute these queries in the BigQuery Studio SQL Editor:
+              </p>
+            </div>
+            <div>
+              <a href="https://console.cloud.google.com/bigquery?project=project-b6567b21-77eb-47fb-926" target="_blank" class="btn btn-primary btn-sm">
+                <i class="fa-solid fa-arrow-up-right-from-square"></i> Open Google BigQuery Console
+              </a>
+            </div>
+          </div>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+            <div style="background: #0f172a; padding: 1rem; border-radius: 8px; border: 1px solid var(--border-color);">
+              <small style="color: var(--accent-emerald); font-weight: 700; text-transform: uppercase;">1. Items Warehouse Table Query</small>
+              <pre class="schema-pre" style="margin-top: 0.5rem; padding: 0.75rem;"><code>SELECT item_code, name, brand, price, gst_percent, created_at 
+FROM `project-b6567b21-77eb-47fb-926.jompoi_reporting.items` 
+ORDER BY created_at DESC LIMIT 5;</code></pre>
+            </div>
+            <div style="background: #0f172a; padding: 1rem; border-radius: 8px; border: 1px solid var(--border-color);">
+              <small style="color: #60a5fa; font-weight: 700; text-transform: uppercase;">2. Purchases Warehouse Table Query</small>
+              <pre class="schema-pre" style="margin-top: 0.5rem; padding: 0.75rem;"><code>SELECT invoice_no, invoice_date, vendor, item_name, quantity, rate, total_amount, created_at 
+FROM `project-b6567b21-77eb-47fb-926.jompoi_reporting.purchases` 
+ORDER BY created_at DESC LIMIT 5;</code></pre>
+            </div>
+          </div>
+
+          <div style="margin-top: 1rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem; padding-top: 0.75rem; border-top: 1px solid rgba(255,255,255,0.1);">
+            <div style="font-size: 0.8rem; color: var(--text-secondary); display: flex; gap: 1rem; flex-wrap: wrap;">
+              <span><i class="fa-solid fa-link" style="color: #60a5fa;"></i> Direct REST API: <a href="/api/bigquery/items" target="_blank" style="color: #38bdf8;">/api/bigquery/items</a></span>
+              <span><i class="fa-solid fa-link" style="color: #60a5fa;"></i> Purchases API: <a href="/api/bigquery/purchases" target="_blank" style="color: #38bdf8;">/api/bigquery/purchases</a></span>
+              <span><i class="fa-solid fa-link" style="color: #60a5fa;"></i> Sync Status API: <a href="/api/bigquery/sync-status" target="_blank" style="color: #38bdf8;">/api/bigquery/sync-status</a></span>
+            </div>
+          </div>
         </div>
       </section>
     </main>

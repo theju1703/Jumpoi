@@ -51,7 +51,10 @@ class BigQueryLoader:
 
         table_id = f"{self.project_id}.{self.dataset_id}.{table_name}"
         try:
-            errors = self.client.insert_rows_json(table_id, rows)
+            # Deterministic insert IDs for BigQuery streaming deduplication
+            row_ids = [str(r.get("_id") or r.get("item_code") or r.get("invoice_no")) for r in rows]
+            has_valid_ids = all(bool(i and i != "None") for i in row_ids)
+            errors = self.client.insert_rows_json(table_id, rows, row_ids=row_ids if has_valid_ids else None)
             if not errors:
                 return {
                     "status": "success",
