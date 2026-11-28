@@ -1,0 +1,1189 @@
+import re
+
+with open("index.html", "r", encoding="utf-8") as f:
+    html = f.read()
+
+# 1. Update #tab-items
+items_replacement = """      <!-- TAB 6: MASTER ITEMS -->
+      <section id="tab-items" class="tab-pane active">
+        <!-- Stock Data Analysis KPI Cards -->
+        <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 1.5rem;">
+          <div class="kpi-card">
+            <div class="kpi-icon blue"><i class="fa-solid fa-boxes-stacked"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Total SKUs</span>
+              <h3 id="stat-total-items">5 Items</h3>
+              <span class="kpi-sub neutral">Matching Filter</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon emerald"><i class="fa-solid fa-warehouse"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Stock on Hand</span>
+              <h3 id="stat-total-stock">140 Units</h3>
+              <span class="kpi-sub positive">&sum; IN - &sum; OUT Real-Time</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon purple"><i class="fa-solid fa-circle-check"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">In-Stock SKUs</span>
+              <h3 id="stat-in-stock">5 SKUs</h3>
+              <span class="kpi-sub positive">Available for Billing</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon amber"><i class="fa-solid fa-triangle-exclamation"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Low / Out Alerts</span>
+              <h3 id="stat-low-stock">1 SKU</h3>
+              <span class="kpi-sub warning">Safety Stock Threshold</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon emerald"><i class="fa-solid fa-coins"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Stock Valuation</span>
+              <h3 id="stat-stock-valuation">₹52,800.00</h3>
+              <span class="kpi-sub positive">Inventory Asset Value</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Add Master Item Card (Collapsible) -->
+        <div id="master-item-form-card" class="bq-form-container" style="display: block; margin-bottom: 1.5rem; border: 1px solid var(--accent-emerald);">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+            <div>
+              <h3 style="font-size: 1.1rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; color: #fff;">
+                <i class="fa-solid fa-circle-plus" style="color: var(--accent-emerald);"></i> Add New Product
+              </h3>
+              <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.2rem;">
+                Register new product details, retail pricing, tax rates, and inventory thresholds.
+              </p>
+            </div>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn btn-secondary btn-sm" id="btn-master-item-clear">
+                <i class="fa-solid fa-rotate-left"></i> Clear
+              </button>
+            </div>
+          </div>
+
+          <form id="form-master-add-item" onsubmit="return false;" style="margin-top: 1rem;">
+            <div class="bq-grid-form">
+              <div class="form-group">
+                <label>Item Code *</label>
+                <input type="text" id="master-input-code" placeholder="e.g. ITM007" required />
+              </div>
+              <div class="form-group" style="grid-column: span 2;">
+                <label>Item Name *</label>
+                <input type="text" id="master-input-name" placeholder="e.g. Himalayan Rock Salt 1kg" required />
+              </div>
+              <div class="form-group">
+                <label>Brand</label>
+                <input type="text" id="master-input-brand" placeholder="e.g. Tata Salt" />
+              </div>
+              <div class="form-group">
+                <label>Category</label>
+                <input type="text" id="master-input-category" placeholder="e.g. Grocery & Spices" />
+              </div>
+              <div class="form-group">
+                <label>Retail Price (₹) *</label>
+                <input type="number" id="master-input-price" placeholder="0.00" step="0.5" min="0" required />
+              </div>
+              <div class="form-group">
+                <label>Cost Price (₹)</label>
+                <input type="number" id="master-input-cost" placeholder="0.00" step="0.5" min="0" />
+              </div>
+              <div class="form-group">
+                <label>GST Rate % *</label>
+                <select id="master-input-gst">
+                  <option value="0">0% (Nil)</option>
+                  <option value="5" selected>5%</option>
+                  <option value="12">12%</option>
+                  <option value="18">18%</option>
+                  <option value="28">28%</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Initial Opening Stock (Units)</label>
+                <input type="number" id="master-input-opening" placeholder="0" min="0" />
+              </div>
+              <div class="form-group">
+                <label>Min Alert Qty</label>
+                <input type="number" id="master-input-alert" placeholder="10" min="1" />
+              </div>
+              <div class="form-group">
+                <label>Barcode</label>
+                <input type="text" id="master-input-barcode" placeholder="e.g. 890123456007" />
+              </div>
+            </div>
+
+            <div style="margin-top: 1.25rem; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem;">
+              <button class="btn btn-success" id="btn-submit-master-item" style="padding: 0.65rem 1.25rem;">
+                <i class="fa-solid fa-check"></i> Save Product
+              </button>
+            </div>
+          </form>
+
+          <div id="master-item-status-alert" class="alert-box alert-success" style="display: none;">
+            <div id="master-item-status-alert-content"></div>
+            <button onclick="document.getElementById('master-item-status-alert').style.display='none'" style="background:transparent; border:none; color:inherit; cursor:pointer; font-size:1.1rem;">&times;</button>
+          </div>
+        </div>
+
+        <!-- Master Products Multi-Filter Card -->
+        <div class="filter-card">
+          <div class="filter-header">
+            <div class="filter-title">
+              <i class="fa-solid fa-filter" style="color: var(--accent-emerald);"></i>
+              Product Catalog Filters
+              <span class="active-filter-badge" id="items-active-filters-count" style="display: none;">0</span>
+            </div>
+            <div class="filter-actions">
+              <button class="btn-reset-filters" id="btn-reset-items-filters">
+                <i class="fa-solid fa-rotate-left"></i> Reset
+              </button>
+              <button class="btn-export-csv" id="btn-export-items-csv">
+                <i class="fa-solid fa-file-csv"></i> Export CSV
+              </button>
+            </div>
+          </div>
+          <div class="filter-grid">
+            <div class="filter-field" style="grid-column: span 2;">
+              <label>Search Product</label>
+              <input type="text" id="items-filter-search" placeholder="Search by name, code, brand, barcode..." />
+              <!-- Legacy hidden sync -->
+              <input type="hidden" id="item-search-filter" />
+            </div>
+            <div class="filter-field">
+              <label>Category</label>
+              <select id="items-filter-category">
+                <option value="ALL">All Categories</option>
+                <option value="Grains & Rice">Grains & Rice</option>
+                <option value="Edible Oils">Edible Oils</option>
+                <option value="Pulses">Pulses</option>
+                <option value="Dairy">Dairy</option>
+                <option value="Flour & Atta">Flour & Atta</option>
+                <option value="Grocery & Spices">Grocery & Spices</option>
+              </select>
+            </div>
+            <div class="filter-field">
+              <label>Stock Status</label>
+              <select id="items-filter-stock">
+                <option value="ALL">All Stock Levels</option>
+                <option value="IN_STOCK">In Stock (> 0)</option>
+                <option value="LOW_STOCK">Low Stock Alert (≤ Alert Qty)</option>
+                <option value="OUT_OF_STOCK">Out of Stock (0 Units)</option>
+              </select>
+              <!-- Legacy hidden sync -->
+              <input type="hidden" id="item-stock-filter" value="ALL" />
+            </div>
+            <div class="filter-field">
+              <label>Brand</label>
+              <select id="items-filter-brand">
+                <option value="ALL">All Brands</option>
+              </select>
+            </div>
+            <div class="filter-field">
+              <label>Min Price (₹)</label>
+              <input type="number" id="items-filter-min-price" placeholder="0.00" min="0" step="1" />
+            </div>
+            <div class="filter-field">
+              <label>Max Price (₹)</label>
+              <input type="number" id="items-filter-max-price" placeholder="No Max" min="0" step="1" />
+            </div>
+            <div class="filter-field">
+              <label>GST Rate %</label>
+              <select id="items-filter-gst">
+                <option value="ALL">All Rates</option>
+                <option value="0">0% (Nil)</option>
+                <option value="5">5%</option>
+                <option value="12">12%</option>
+                <option value="18">18%</option>
+                <option value="28">28%</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-container" style="border-radius: 10px 10px 0 0;">
+          <div class="table-header" style="flex-wrap: wrap; gap: 1rem;">
+            <div>
+              <h3><i class="fa-solid fa-box-open"></i> Product Catalog & Inventory</h3>
+              <p style="font-size: 0.8rem; color: var(--text-secondary); margin: 0.2rem 0 0 0;">
+                Live inventory tracking: Stock increases upon vendor purchase, decreases upon POS customer sale. Click any column header to sort.
+              </p>
+            </div>
+            <div>
+              <span id="items-count-badge" class="badge badge-success" style="font-size: 0.85rem; padding: 0.45rem 0.9rem; border-radius: 20px;">
+                5 Items
+              </span>
+            </div>
+          </div>
+          <table class="data-table" id="table-items-master">
+            <thead>
+              <tr>
+                <th class="sortable-th" data-module="items" data-sort="item_code">Item Code <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="items" data-sort="name">Item Name <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="items" data-sort="brand">Brand <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="items" data-sort="category">Category <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="items" data-sort="price">Retail Price (₹) <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="items" data-sort="cost_price">Cost Price (₹) <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="items" data-sort="gst_percent">GST % <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="items" data-sort="stock_on_hand">Stock on Hand <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="items" data-sort="status">Stock Status <i class="fa-solid fa-sort sort-icon"></i></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <!-- Items Pagination Bar -->
+        <div class="pagination-container" id="items-pagination-bar">
+          <div class="pagination-info" id="items-pagination-info">Showing 1 to 5 of 5 entries</div>
+          <div class="page-size-selector">
+            <span>Show</span>
+            <select id="items-page-size">
+              <option value="10" selected>10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="ALL">All</option>
+            </select>
+            <span>entries</span>
+          </div>
+          <div class="pagination-controls" id="items-pagination-controls"></div>
+        </div>
+      </section>"""
+
+# 2. Update #tab-purchases
+purchases_replacement = """      <!-- TAB 5: PURCHASE INVOICES (WITH PER-ITEM GST) -->
+      <section id="tab-purchases" class="tab-pane">
+        <!-- Purchase Data Analysis KPI Cards -->
+        <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 1.5rem;">
+          <div class="kpi-card">
+            <div class="kpi-icon blue"><i class="fa-solid fa-file-invoice"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Total Bills</span>
+              <h3 id="pur-kpi-count">2 Invoices</h3>
+              <span class="kpi-sub neutral">Matching Filter</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon purple"><i class="fa-solid fa-list-check"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Line Items</span>
+              <h3 id="pur-kpi-lines">2 Items</h3>
+              <span class="kpi-sub neutral">Total Procured Lines</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon emerald"><i class="fa-solid fa-receipt"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Taxable Net Amount</span>
+              <h3 id="pur-kpi-net">₹30,000.00</h3>
+              <span class="kpi-sub positive">Base Procurement Cost</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon emerald"><i class="fa-solid fa-shield-halved"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Input Tax Credit (ITC)</span>
+              <h3 id="pur-kpi-itc">₹1,500.00</h3>
+              <span class="kpi-sub positive">GSTR-2B Claimable</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon blue"><i class="fa-solid fa-wallet"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Gross Spend Total</span>
+              <h3 id="pur-kpi-total">₹31,500.00</h3>
+              <span class="kpi-sub neutral">Net + GST Total</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon amber"><i class="fa-solid fa-chart-line"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Average Bill Value</span>
+              <h3 id="pur-kpi-avg">₹15,750.00</h3>
+              <span class="kpi-sub warning">Per Invoice Avg</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Record Vendor Procurement Bill Form Card -->
+        <div id="purchase-form-card" class="bq-form-container" style="display: block; margin-bottom: 1.5rem; border: 1px solid var(--accent-blue);">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem;">
+            <div>
+              <h3 style="font-size: 1.1rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; color: #fff;">
+                <i class="fa-solid fa-file-invoice-dollar" style="color: var(--accent-blue);"></i> Create Purchase Invoice
+              </h3>
+              <p style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.2rem;">
+                Record incoming supplier procurement invoice and update warehouse inventory.
+              </p>
+            </div>
+            <div style="display: flex; gap: 0.5rem; flex-wrap: wrap;">
+              <button class="btn btn-secondary btn-sm" id="btn-purchase-clear-form">
+                <i class="fa-solid fa-rotate-left"></i> Clear
+              </button>
+            </div>
+          </div>
+
+          <form id="form-add-purchase" onsubmit="return false;" style="margin-top: 1rem;">
+            <!-- Invoice Header: Bill No, Date, Vendor, GSTIN -->
+            <div class="bq-grid-form">
+              <div class="form-group">
+                <label>Invoice / Bill No *</label>
+                <input type="text" id="pur-input-no" placeholder="e.g. PUR-2026-004" required />
+              </div>
+              <div class="form-group">
+                <label>Invoice Date *</label>
+                <input type="date" id="pur-input-date" required />
+              </div>
+              <div class="form-group" style="grid-column: span 2;">
+                <label>Vendor / Supplier *</label>
+                <select id="pur-input-vendor">
+                  <option value="KR Agro Supplies" data-gstin="33AABCK1234A1Z5">KR Agro Supplies (Chennai)</option>
+                  <option value="Adani Wilmar Dist" data-gstin="33AABCA5678B1Z2">Adani Wilmar Dist (Madurai)</option>
+                  <option value="Tata Consumer Products" data-gstin="33AAACT0001B1Z9">Tata Consumer Products (Coimbatore)</option>
+                  <option value="Aavin Dairy Cooperative" data-gstin="33AAACA0002C1Z4">Aavin Dairy Cooperative (Chennai)</option>
+                  <option value="Fortune Agri Products" data-gstin="33AAACF0003D1Z6">Fortune Agri Products</option>
+                </select>
+              </div>
+              <div class="form-group">
+                <label>Vendor GSTIN</label>
+                <input type="text" id="pur-input-gstin" value="33AABCK1234A1Z5" />
+              </div>
+            </div>
+
+            <!-- Multi-Item Line Entry Sub-Section (Client Requirement) -->
+            <div style="background: rgba(15, 23, 42, 0.65); border: 1px solid var(--border-color); border-radius: 8px; padding: 1rem; margin-top: 1.25rem;">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.85rem; flex-wrap: wrap; gap: 0.5rem;">
+                <h4 style="font-size: 0.95rem; font-weight: 700; color: #fff; margin: 0; display: flex; align-items: center; gap: 0.5rem;">
+                  <i class="fa-solid fa-cart-plus" style="color: var(--accent-emerald);"></i> Add Line Items to Bill
+                </h4>
+                <span style="font-size: 0.78rem; color: var(--text-secondary);">
+                  Add one or more products to this purchase bill. Total amounts calculate automatically.
+                </span>
+              </div>
+              <div class="bq-grid-form" style="align-items: flex-end; gap: 0.75rem;">
+                <div class="form-group" style="grid-column: span 2;">
+                  <label>Item SKU / Code *</label>
+                  <select id="pur-input-item-code">
+                    <option value="ITM001" data-name="Basmati Rice 5kg" data-rate="380.0" data-gst="5">ITM001 - Basmati Rice 5kg</option>
+                    <option value="ITM002" data-name="Sunflower Oil 1L" data-rate="110.0" data-gst="5">ITM002 - Sunflower Oil 1L</option>
+                    <option value="ITM003" data-name="Toor Dal 1kg" data-rate="130.0" data-gst="0">ITM003 - Toor Dal 1kg</option>
+                    <option value="ITM004" data-name="Milk 500ml" data-rate="20.0" data-gst="0">ITM004 - Milk 500ml</option>
+                    <option value="ITM005" data-name="Chakki Atta 5kg" data-rate="200.0" data-gst="5">ITM005 - Chakki Atta 5kg</option>
+                    <option value="ITM006" data-name="Organic Filter Coffee 500g" data-rate="180.0" data-gst="5">ITM006 - Organic Filter Coffee</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Quantity *</label>
+                  <input type="number" id="pur-input-qty" placeholder="Qty" min="1" step="1" />
+                </div>
+                <div class="form-group">
+                  <label>Purchase Rate ₹ *</label>
+                  <input type="number" id="pur-input-rate" placeholder="Rate" min="0" step="0.5" />
+                </div>
+                <div class="form-group">
+                  <label>Input GST % *</label>
+                  <select id="pur-input-gst">
+                    <option value="0">0% (Nil)</option>
+                    <option value="5" selected>5%</option>
+                    <option value="12">12%</option>
+                    <option value="18">18%</option>
+                    <option value="28">28%</option>
+                  </select>
+                </div>
+                <div class="form-group" style="display: flex; align-items: flex-end;">
+                  <button type="button" class="btn btn-primary" id="btn-add-bill-item" style="padding: 0.65rem 1rem; white-space: nowrap; font-weight: 600;">
+                    <i class="fa-solid fa-plus"></i> Add to Bill
+                  </button>
+                </div>
+              </div>
+
+              <!-- Live Current Bill Line Items Table -->
+              <div id="pur-line-items-container" style="margin-top: 1rem; display: none;">
+                <h5 style="font-size: 0.85rem; color: #94a3b8; margin: 0 0 0.5rem 0; text-transform: uppercase;">
+                  Line Items in This Bill (<span id="pur-line-items-count">0</span>):
+                </h5>
+                <div style="overflow-x: auto;">
+                  <table class="data-table" style="font-size: 0.82rem; margin-top: 0;" id="table-bill-line-items">
+                    <thead>
+                      <tr>
+                        <th>Item Code</th>
+                        <th>Item Name</th>
+                        <th>Qty</th>
+                        <th>Rate (₹)</th>
+                        <th>GST %</th>
+                        <th>Taxable Net (₹)</th>
+                        <th>ITC Amount (₹)</th>
+                        <th>Line Total (₹)</th>
+                        <th style="text-align: center;">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody id="pur-line-items-tbody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+
+            <!-- Summary & Actions Bar -->
+            <div style="background: rgba(15, 23, 42, 0.8); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.85rem 1.25rem; margin-top: 1rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+              <div style="display: flex; gap: 1.5rem; flex-wrap: wrap;">
+                <div>
+                  <small style="color: var(--text-secondary); text-transform: uppercase; font-size: 0.72rem; display: block;">Total Net Amount</small>
+                  <strong id="pur-sum-net" style="font-size: 1.1rem; color: #fff;">₹0.00</strong>
+                </div>
+                <div>
+                  <small style="color: var(--text-secondary); text-transform: uppercase; font-size: 0.72rem; display: block;">Total Input Tax Credit (ITC)</small>
+                  <strong id="pur-sum-gst" style="font-size: 1.1rem; color: var(--accent-emerald);">₹0.00</strong>
+                </div>
+                <div>
+                  <small style="color: var(--text-secondary); text-transform: uppercase; font-size: 0.72rem; display: block;">Gross Bill Total</small>
+                  <strong id="pur-sum-total" style="font-size: 1.2rem; color: #60a5fa;">₹0.00</strong>
+                </div>
+              </div>
+              <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <label style="font-size: 0.85rem; color: var(--accent-emerald); display: flex; align-items: center; gap: 0.4rem; cursor: pointer;">
+                  <input type="checkbox" id="pur-input-itc" checked style="accent-color: var(--accent-emerald);" />
+                  <strong>ITC Eligible</strong>
+                </label>
+                <button class="btn btn-success" id="btn-submit-purchase" style="padding: 0.65rem 1.25rem;">
+                  <i class="fa-solid fa-check"></i> Save Purchase Invoice
+                </button>
+              </div>
+            </div>
+          </form>
+
+          <!-- Status alert box -->
+          <div id="purchase-status-alert" class="alert-box alert-success" style="display: none;">
+            <div id="purchase-status-alert-content"></div>
+            <button onclick="document.getElementById('purchase-status-alert').style.display='none'" style="background:transparent; border:none; color:inherit; cursor:pointer; font-size:1.1rem;">&times;</button>
+          </div>
+        </div>
+
+        <!-- Purchase Invoices Multi-Filter Card -->
+        <div class="filter-card">
+          <div class="filter-header">
+            <div class="filter-title">
+              <i class="fa-solid fa-filter" style="color: var(--accent-blue);"></i>
+              Purchase Invoices Multi-Filter & Search
+              <span class="active-filter-badge" id="purchases-active-filters-count" style="display: none;">0</span>
+            </div>
+            <div class="filter-actions">
+              <button class="btn-reset-filters" id="btn-reset-purchases-filters">
+                <i class="fa-solid fa-rotate-left"></i> Reset
+              </button>
+              <button class="btn-export-csv" id="btn-export-purchases-csv">
+                <i class="fa-solid fa-file-csv"></i> Export CSV
+              </button>
+            </div>
+          </div>
+          <div class="filter-grid">
+            <div class="filter-field" style="grid-column: span 2;">
+              <label>Search Bills / Items</label>
+              <input type="text" id="purchases-filter-search" placeholder="Search by Bill No (PUR-...), vendor, item..." />
+              <!-- Legacy hidden sync -->
+              <input type="hidden" id="pur-search-filter" />
+            </div>
+            <div class="filter-field">
+              <label>Vendor / Supplier</label>
+              <select id="purchases-filter-vendor">
+                <option value="ALL">All Vendors</option>
+                <option value="KR Agro Supplies">KR Agro Supplies</option>
+                <option value="Adani Wilmar Dist">Adani Wilmar Dist</option>
+                <option value="Tata Consumer Products">Tata Consumer Products</option>
+                <option value="Aavin Dairy Cooperative">Aavin Dairy Cooperative</option>
+                <option value="Fortune Agri Products">Fortune Agri Products</option>
+              </select>
+            </div>
+            <div class="filter-field">
+              <label>Date From</label>
+              <input type="date" id="purchases-filter-date-from" />
+            </div>
+            <div class="filter-field">
+              <label>Date To</label>
+              <input type="date" id="purchases-filter-date-to" />
+            </div>
+            <div class="filter-field">
+              <label>Min Gross (₹)</label>
+              <input type="number" id="purchases-filter-min-total" placeholder="0.00" min="0" step="100" />
+            </div>
+            <div class="filter-field">
+              <label>Max Gross (₹)</label>
+              <input type="number" id="purchases-filter-max-total" placeholder="No Max" min="0" step="100" />
+            </div>
+          </div>
+          <div class="date-preset-group">
+            <span style="font-size: 0.72rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700; align-self: center; margin-right: 0.35rem;">Date Presets:</span>
+            <button class="preset-pill active" data-module="purchases" data-range="ALL">All Dates</button>
+            <button class="preset-pill" data-module="purchases" data-range="TODAY">Today</button>
+            <button class="preset-pill" data-module="purchases" data-range="YESTERDAY">Yesterday</button>
+            <button class="preset-pill" data-module="purchases" data-range="THIS_WEEK">This Week</button>
+            <button class="preset-pill" data-module="purchases" data-range="THIS_MONTH">This Month</button>
+            <button class="preset-pill" data-module="purchases" data-range="YTD">YTD</button>
+          </div>
+        </div>
+
+        <div class="table-container" style="border-radius: 10px 10px 0 0;">
+          <div class="table-header" style="flex-wrap: wrap; gap: 1rem; align-items: center; justify-content: space-between;">
+            <div>
+              <h3><i class="fa-solid fa-truck"></i> Vendor Purchase Invoices (Input Tax Credit Sourced)</h3>
+              <p style="font-size: 0.8rem; color: var(--text-secondary); margin: 0.2rem 0 0 0;">
+                Official register of vendor procurement invoices and input tax credits. Click any column header to sort.
+              </p>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
+              <span id="purchases-count-badge" class="badge badge-success" style="font-size: 0.85rem; padding: 0.45rem 0.9rem; border-radius: 20px;">
+                2 Invoices
+              </span>
+              <button class="btn btn-secondary btn-sm" id="btn-refresh-purchases">
+                <i class="fa-solid fa-arrows-rotate"></i> Refresh
+              </button>
+            </div>
+          </div>
+          <table class="data-table" id="table-purchases">
+            <thead>
+              <tr>
+                <th class="sortable-th" data-module="purchases" data-sort="invoice_no">Bill No <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="purchases" data-sort="invoice_date">Date <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="purchases" data-sort="vendor">Vendor <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="purchases" data-sort="item_code">Item Code <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="purchases" data-sort="item_name">Item Name <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="purchases" data-sort="quantity">Qty <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="purchases" data-sort="rate">Rate (₹) <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="purchases" data-sort="net_amount">Net Amount (₹) <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="purchases" data-sort="gst_percent">GST % <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="purchases" data-sort="gst_amount">ITC Amount (₹) <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="purchases" data-sort="total_amount">Gross Total (₹) <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th style="text-align: center;">Print Action</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <!-- Purchases Pagination Bar -->
+        <div class="pagination-container" id="purchases-pagination-bar">
+          <div class="pagination-info" id="purchases-pagination-info">Showing 1 to 2 of 2 entries</div>
+          <div class="page-size-selector">
+            <span>Show</span>
+            <select id="purchases-page-size">
+              <option value="10" selected>10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="ALL">All</option>
+            </select>
+            <span>entries</span>
+          </div>
+          <div class="pagination-controls" id="purchases-pagination-controls"></div>
+        </div>
+      </section>"""
+
+# 3. Update #tab-sales
+sales_replacement = """      <!-- TAB 4: SALES INVOICES -->
+      <section id="tab-sales" class="tab-pane">
+        <!-- Sales Analysis KPI Cards -->
+        <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 1.5rem;">
+          <div class="kpi-card">
+            <div class="kpi-icon blue"><i class="fa-solid fa-file-invoice"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Sales Invoices</span>
+              <h3 id="sales-kpi-count">3 Invoices</h3>
+              <span class="kpi-sub neutral">Matching Filter</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon purple"><i class="fa-solid fa-boxes-stacked"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Total Units Sold</span>
+              <h3 id="sales-kpi-qty">65 Units</h3>
+              <span class="kpi-sub positive">Customer Outward</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon emerald"><i class="fa-solid fa-receipt"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Net Sales Revenue</span>
+              <h3 id="sales-kpi-net">₹12,675.00</h3>
+              <span class="kpi-sub positive">Taxable Sales Value</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon amber"><i class="fa-solid fa-scale-balanced"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Output GST Tax</span>
+              <h3 id="sales-kpi-gst">₹393.75</h3>
+              <span class="kpi-sub warning">GSTR-1 Liability</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon emerald"><i class="fa-solid fa-coins"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Gross Revenue</span>
+              <h3 id="sales-kpi-total">₹13,068.75</h3>
+              <span class="kpi-sub positive">Total Cash/Bank Inflow</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon blue"><i class="fa-solid fa-chart-line"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Avg Ticket Size</span>
+              <h3 id="sales-kpi-avg">₹4,356.25</h3>
+              <span class="kpi-sub neutral">Per Customer Invoice</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sales Multi-Filter Card -->
+        <div class="filter-card">
+          <div class="filter-header">
+            <div class="filter-title">
+              <i class="fa-solid fa-filter" style="color: var(--accent-blue);"></i>
+              Customer Sales Filters & Search
+              <span class="active-filter-badge" id="sales-active-filters-count" style="display: none;">0</span>
+            </div>
+            <div class="filter-actions">
+              <button class="btn-reset-filters" id="btn-reset-sales-filters">
+                <i class="fa-solid fa-rotate-left"></i> Reset
+              </button>
+              <button class="btn-export-csv" id="btn-export-sales-csv">
+                <i class="fa-solid fa-file-csv"></i> Export CSV
+              </button>
+            </div>
+          </div>
+          <div class="filter-grid">
+            <div class="filter-field" style="grid-column: span 2;">
+              <label>Search Sales Invoices</label>
+              <input type="text" id="sales-filter-search" placeholder="Search by Invoice No (INV-...), Customer, City, Item..." />
+            </div>
+            <div class="filter-field">
+              <label>Customer</label>
+              <select id="sales-filter-customer">
+                <option value="ALL">All Customers</option>
+                <option value="ABC Stores">ABC Stores</option>
+                <option value="Sri Murugan Supermarket">Sri Murugan Supermarket</option>
+                <option value="Kovai Fresh Mart">Kovai Fresh Mart</option>
+              </select>
+            </div>
+            <div class="filter-field">
+              <label>City / Location</label>
+              <select id="sales-filter-city">
+                <option value="ALL">All Cities</option>
+                <option value="Chennai">Chennai</option>
+                <option value="Madurai">Madurai</option>
+                <option value="Coimbatore">Coimbatore</option>
+              </select>
+            </div>
+            <div class="filter-field">
+              <label>Date From</label>
+              <input type="date" id="sales-filter-date-from" />
+            </div>
+            <div class="filter-field">
+              <label>Date To</label>
+              <input type="date" id="sales-filter-date-to" />
+            </div>
+            <div class="filter-field">
+              <label>Min Gross (₹)</label>
+              <input type="number" id="sales-filter-min-total" placeholder="0.00" min="0" step="100" />
+            </div>
+            <div class="filter-field">
+              <label>Max Gross (₹)</label>
+              <input type="number" id="sales-filter-max-total" placeholder="No Max" min="0" step="100" />
+            </div>
+          </div>
+          <div class="date-preset-group">
+            <span style="font-size: 0.72rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700; align-self: center; margin-right: 0.35rem;">Date Presets:</span>
+            <button class="preset-pill active" data-module="sales" data-range="ALL">All Dates</button>
+            <button class="preset-pill" data-module="sales" data-range="TODAY">Today</button>
+            <button class="preset-pill" data-module="sales" data-range="YESTERDAY">Yesterday</button>
+            <button class="preset-pill" data-module="sales" data-range="THIS_WEEK">This Week</button>
+            <button class="preset-pill" data-module="sales" data-range="THIS_MONTH">This Month</button>
+            <button class="preset-pill" data-module="sales" data-range="YTD">YTD</button>
+          </div>
+        </div>
+
+        <div class="table-container" style="border-radius: 10px 10px 0 0;">
+          <div class="table-header">
+            <h3><i class="fa-solid fa-cart-shopping"></i> Customer Sales Invoices Register</h3>
+            <span id="sales-count-badge" class="badge badge-success" style="font-size: 0.85rem; padding: 0.45rem 0.9rem; border-radius: 20px;">
+              3 Invoices
+            </span>
+          </div>
+          <table class="data-table" id="table-sales">
+            <thead>
+              <tr>
+                <th class="sortable-th" data-module="sales" data-sort="invoice_no">Invoice No <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="sales" data-sort="invoice_date">Date <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="sales" data-sort="customer_name">Customer <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="sales" data-sort="customer_city">City <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="sales" data-sort="item_name">Item <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="sales" data-sort="quantity">Qty <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="sales" data-sort="rate">Rate (₹) <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="sales" data-sort="net_amount">Net Amount (₹) <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="sales" data-sort="gst_amount">GST Amount (₹) <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="sales" data-sort="total_amount">Gross Total (₹) <i class="fa-solid fa-sort sort-icon"></i></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <!-- Sales Pagination Bar -->
+        <div class="pagination-container" id="sales-pagination-bar">
+          <div class="pagination-info" id="sales-pagination-info">Showing 1 to 3 of 3 entries</div>
+          <div class="page-size-selector">
+            <span>Show</span>
+            <select id="sales-page-size">
+              <option value="10" selected>10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="ALL">All</option>
+            </select>
+            <span>entries</span>
+          </div>
+          <div class="pagination-controls" id="sales-pagination-controls"></div>
+        </div>
+      </section>"""
+
+# 4. Update #tab-inventory
+inventory_replacement = """      <!-- TAB 7: STOCK LEDGER -->
+      <section id="tab-inventory" class="tab-pane">
+        <!-- Inventory Movement KPI Cards -->
+        <div class="kpi-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 1.5rem;">
+          <div class="kpi-card">
+            <div class="kpi-icon blue"><i class="fa-solid fa-arrows-up-down"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Ledger Movements</span>
+              <h3 id="inv-kpi-movements">7 Events</h3>
+              <span class="kpi-sub neutral">Matching Filter</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon emerald"><i class="fa-solid fa-arrow-down-long"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Stock IN Units</span>
+              <h3 id="inv-kpi-in">240 Units</h3>
+              <span class="kpi-sub positive">Purchases & Opening</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon amber"><i class="fa-solid fa-arrow-up-long"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Stock OUT Units</span>
+              <h3 id="inv-kpi-out">65 Units</h3>
+              <span class="kpi-sub warning">Customer Sales</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-icon purple"><i class="fa-solid fa-warehouse"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Net Movement Delta</span>
+              <h3 id="inv-kpi-net">175 Units</h3>
+              <span class="kpi-sub positive">&sum; IN - &sum; OUT</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Inventory Movement Multi-Filter Card -->
+        <div class="filter-card">
+          <div class="filter-header">
+            <div class="filter-title">
+              <i class="fa-solid fa-filter" style="color: var(--accent-emerald);"></i>
+              Inventory Movement Audit Ledger Filters
+              <span class="active-filter-badge" id="inv-active-filters-count" style="display: none;">0</span>
+            </div>
+            <div class="filter-actions">
+              <button class="btn-reset-filters" id="btn-reset-inventory-filters">
+                <i class="fa-solid fa-rotate-left"></i> Reset
+              </button>
+              <button class="btn-export-csv" id="btn-export-inventory-csv">
+                <i class="fa-solid fa-file-csv"></i> Export CSV
+              </button>
+            </div>
+          </div>
+          <div class="filter-grid">
+            <div class="filter-field" style="grid-column: span 2;">
+              <label>Search Movements</label>
+              <input type="text" id="inv-filter-search" placeholder="Search by item code, name, voucher (PUR-..., INV-..., OP-...)..." />
+            </div>
+            <div class="filter-field">
+              <label>Product / Item</label>
+              <select id="inv-filter-item">
+                <option value="ALL">All Items</option>
+              </select>
+            </div>
+            <div class="filter-field">
+              <label>Movement Type</label>
+              <select id="inv-filter-type">
+                <option value="ALL">All Movement Types</option>
+                <option value="IN">IN (Purchases & Opening Stock)</option>
+                <option value="OUT">OUT (Customer Sales)</option>
+              </select>
+            </div>
+            <div class="filter-field">
+              <label>Date From</label>
+              <input type="date" id="inv-filter-date-from" />
+            </div>
+            <div class="filter-field">
+              <label>Date To</label>
+              <input type="date" id="inv-filter-date-to" />
+            </div>
+          </div>
+          <div class="date-preset-group">
+            <span style="font-size: 0.72rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700; align-self: center; margin-right: 0.35rem;">Date Presets:</span>
+            <button class="preset-pill active" data-module="inventory" data-range="ALL">All Dates</button>
+            <button class="preset-pill" data-module="inventory" data-range="TODAY">Today</button>
+            <button class="preset-pill" data-module="inventory" data-range="YESTERDAY">Yesterday</button>
+            <button class="preset-pill" data-module="inventory" data-range="THIS_WEEK">This Week</button>
+            <button class="preset-pill" data-module="inventory" data-range="THIS_MONTH">This Month</button>
+            <button class="preset-pill" data-module="inventory" data-range="YTD">YTD</button>
+          </div>
+        </div>
+
+        <div class="table-container" style="border-radius: 10px 10px 0 0;">
+          <div class="table-header">
+            <h3><i class="fa-solid fa-boxes-stacked"></i> Live Inventory Movement Ledger</h3>
+            <span id="inv-count-badge" class="badge badge-success" style="font-size: 0.85rem; padding: 0.45rem 0.9rem; border-radius: 20px;">
+              7 Movements
+            </span>
+          </div>
+          <table class="data-table" id="table-stock-ledger">
+            <thead>
+              <tr>
+                <th class="sortable-th" data-module="inventory" data-sort="date">Date <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="inventory" data-sort="item_code">Item Code <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="inventory" data-sort="item_name">Item Name <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="inventory" data-sort="transaction_type">Movement <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="inventory" data-sort="quantity">Quantity <i class="fa-solid fa-sort sort-icon"></i></th>
+                <th class="sortable-th" data-module="inventory" data-sort="voucher_no">Voucher Reference <i class="fa-solid fa-sort sort-icon"></i></th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <!-- Inventory Pagination Bar -->
+        <div class="pagination-container" id="inv-pagination-bar">
+          <div class="pagination-info" id="inv-pagination-info">Showing 1 to 7 of 7 entries</div>
+          <div class="page-size-selector">
+            <span>Show</span>
+            <select id="inv-page-size">
+              <option value="10" selected>10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+              <option value="ALL">All</option>
+            </select>
+            <span>entries</span>
+          </div>
+          <div class="pagination-controls" id="inv-pagination-controls"></div>
+        </div>
+      </section>"""
+
+# 5. Update #tab-gst-itc
+gst_replacement = """      <!-- TAB 3: GST & INPUT TAX CREDIT (ITC) REPORT -->
+      <section id="tab-gst-itc" class="tab-pane">
+        <!-- GST Filter & Period Selector Bar -->
+        <div class="filter-card">
+          <div class="filter-header">
+            <div class="filter-title">
+              <i class="fa-solid fa-scale-balanced" style="color: var(--accent-emerald);"></i>
+              GST & Input Tax Credit (ITC) Reconciliation Filter
+            </div>
+            <div class="filter-actions">
+              <button class="btn-reset-filters" id="btn-reset-gst-filters">
+                <i class="fa-solid fa-rotate-left"></i> Reset
+              </button>
+              <button class="btn-export-csv" id="btn-export-gst-csv">
+                <i class="fa-solid fa-file-csv"></i> Export CSV
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="window.print()">
+                <i class="fa-solid fa-print"></i> Print
+              </button>
+            </div>
+          </div>
+          <div class="filter-grid">
+            <div class="filter-field">
+              <label>Date From</label>
+              <input type="date" id="gst-filter-date-from" />
+            </div>
+            <div class="filter-field">
+              <label>Date To</label>
+              <input type="date" id="gst-filter-date-to" />
+            </div>
+            <div class="filter-field">
+              <label>Filter Vendor / Supplier</label>
+              <select id="gst-filter-vendor">
+                <option value="ALL">All Suppliers</option>
+                <option value="KR Agro Supplies">KR Agro Supplies</option>
+                <option value="Adani Wilmar Dist">Adani Wilmar Dist</option>
+                <option value="Tata Consumer Products">Tata Consumer Products</option>
+                <option value="Aavin Dairy Cooperative">Aavin Dairy Cooperative</option>
+              </select>
+            </div>
+          </div>
+          <div class="date-preset-group">
+            <span style="font-size: 0.72rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700; align-self: center; margin-right: 0.35rem;">Period Presets:</span>
+            <button class="preset-pill active" data-module="gst" data-range="ALL">All Time</button>
+            <button class="preset-pill" data-module="gst" data-range="THIS_MONTH">This Month</button>
+            <button class="preset-pill" data-module="gst" data-range="LAST_MONTH">Last Month</button>
+            <button class="preset-pill" data-module="gst" data-range="YTD">YTD</button>
+          </div>
+        </div>
+
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-icon blue"><i class="fa-solid fa-file-invoice"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Output GST (Sales)</span>
+              <h3 id="gst-kpi-output">₹393.75</h3>
+              <span class="kpi-sub neutral">GSTR-1 Tax Liability</span>
+            </div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-icon emerald"><i class="fa-solid fa-shield-halved"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Input Tax Credit (ITC)</span>
+              <h3 id="gst-kpi-itc">₹1,500.00</h3>
+              <span class="kpi-sub positive">GSTR-2B Verified</span>
+            </div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-icon purple"><i class="fa-solid fa-hand-holding-dollar"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">ITC Utilized</span>
+              <h3 id="gst-kpi-utilized">₹393.75</h3>
+              <span class="kpi-sub neutral">Offset against Output Tax</span>
+            </div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-icon amber"><i class="fa-solid fa-wallet"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Net GST Cash Payable</span>
+              <h3 id="gst-kpi-payable">₹0.00</h3>
+              <span class="kpi-sub positive">Zero Cash Outflow</span>
+            </div>
+          </div>
+
+          <div class="kpi-card">
+            <div class="kpi-icon emerald"><i class="fa-solid fa-piggy-bank"></i></div>
+            <div class="kpi-data">
+              <span class="kpi-label">Excess ITC Balance</span>
+              <h3 id="gst-kpi-excess">₹1,106.25</h3>
+              <span class="kpi-sub positive">Carried Forward to Next Month</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-container">
+          <div class="table-header">
+            <h3><i class="fa-solid fa-file-circle-check"></i> Government Tax Credit (ITC) Reconciliation Table</h3>
+            <span class="badge badge-success" id="gst-count-badge">2 Bills Reconciled</span>
+          </div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Vendor / Supplier</th>
+                <th>Bill Voucher</th>
+                <th>Invoice Date</th>
+                <th>Taxable Value</th>
+                <th>Input GST Rate</th>
+                <th>ITC Claimed</th>
+                <th>ITC Eligibility Status</th>
+              </tr>
+            </thead>
+            <tbody id="gst-itc-tbody">
+              <tr>
+                <td><strong>KR Agro Supplies</strong></td>
+                <td><code>PUR-2026-001</code></td>
+                <td>2026-08-20</td>
+                <td>₹19,000.00</td>
+                <td>5.0%</td>
+                <td>₹950.00</td>
+                <td><span class="badge badge-success">ELIGIBLE (GSTR-2B Matched)</span></td>
+              </tr>
+              <tr>
+                <td><strong>Adani Wilmar Dist</strong></td>
+                <td><code>PUR-2026-002</code></td>
+                <td>2026-08-21</td>
+                <td>₹11,000.00</td>
+                <td>5.0%</td>
+                <td>₹550.00</td>
+                <td><span class="badge badge-success">ELIGIBLE (GSTR-2B Matched)</span></td>
+              </tr>
+              <tr style="background: rgba(16, 185, 129, 0.1); font-weight: bold;">
+                <td colspan="5"><strong>TOTAL INPUT TAX CREDIT (ITC) AVAILABLE</strong></td>
+                <td><strong id="gst-itc-table-total">₹1,500.00</strong></td>
+                <td><span class="badge badge-success">100% Reconciled</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>"""
+
+# 6. Update #tab-erp-pnl
+pnl_replacement = """      <!-- TAB 2: ERPNEXT PROFIT & LOSS STATEMENT -->
+      <section id="tab-erp-pnl" class="tab-pane">
+        <!-- P&L Period Filter Card -->
+        <div class="filter-card" style="max-width: 900px; margin: 0 auto 1.5rem auto;">
+          <div class="filter-header">
+            <div class="filter-title">
+              <i class="fa-solid fa-chart-pie" style="color: var(--accent-blue);"></i>
+              Profit & Loss Reporting Period
+            </div>
+            <div class="filter-actions">
+              <button class="btn-reset-filters" id="btn-reset-pnl-filters">
+                <i class="fa-solid fa-rotate-left"></i> Reset
+              </button>
+              <button class="btn-export-csv" id="btn-export-pnl-csv">
+                <i class="fa-solid fa-file-csv"></i> Export CSV
+              </button>
+              <button class="btn btn-secondary btn-sm" onclick="window.print()">
+                <i class="fa-solid fa-print"></i> Print
+              </button>
+            </div>
+          </div>
+          <div class="filter-grid" style="grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));">
+            <div class="filter-field">
+              <label>Date From</label>
+              <input type="date" id="pnl-filter-date-from" />
+            </div>
+            <div class="filter-field">
+              <label>Date To</label>
+              <input type="date" id="pnl-filter-date-to" />
+            </div>
+            <div class="filter-field">
+              <label>Operating Expenses (₹)</label>
+              <input type="number" id="pnl-input-opex" value="850.00" step="50" min="0" />
+            </div>
+          </div>
+          <div class="date-preset-group">
+            <span style="font-size: 0.72rem; color: var(--text-secondary); text-transform: uppercase; font-weight: 700; align-self: center; margin-right: 0.35rem;">Period Presets:</span>
+            <button class="preset-pill active" data-module="pnl" data-range="ALL">All Time</button>
+            <button class="preset-pill" data-module="pnl" data-range="THIS_MONTH">This Month</button>
+            <button class="preset-pill" data-module="pnl" data-range="LAST_MONTH">Last Month</button>
+            <button class="preset-pill" data-module="pnl" data-range="YTD">YTD</button>
+          </div>
+        </div>
+
+        <div class="pnl-container">
+          <div class="pnl-header">
+            <h2><i class="fa-solid fa-file-invoice-dollar"></i> ERP Profit & Loss Statement</h2>
+            <p>Generated by ERP Financial Engine | Operational Accounting Report</p>
+          </div>
+
+          <div class="pnl-body">
+            <div class="pnl-row header-row">
+              <span>Account Head</span>
+              <span>Amount (INR)</span>
+            </div>
+            
+            <div class="pnl-section-title">I. REVENUE FROM OPERATIONS</div>
+            <div class="pnl-row bold">
+              <span>Gross Sales of Grocery Supplies</span>
+              <span id="pnl-gross-rev">₹12,675.00</span>
+            </div>
+            <div class="pnl-row indent">
+              <span>Less: GST Output Tax (Collected)</span>
+              <span id="pnl-gst-out">(₹393.75)</span>
+            </div>
+            <div class="pnl-row bold highlight">
+              <span>Net Operational Revenue</span>
+              <span id="pnl-net-rev">₹12,281.25</span>
+            </div>
+
+            <div class="pnl-section-title">II. COST OF GOODS SOLD (COGS)</div>
+            <div id="pnl-cogs-items-breakdown">
+              <div class="pnl-row indent">
+                <span>Basmati Rice 5kg (10 units sold @ ₹380.00 avg purchase cost)</span>
+                <span>₹3,800.00</span>
+              </div>
+              <div class="pnl-row indent">
+                <span>Sunflower Oil 1L (25 units sold @ ₹110.00 avg purchase cost)</span>
+                <span>₹2,750.00</span>
+              </div>
+            </div>
+            <div class="pnl-row bold highlight">
+              <span>Total Cost of Goods Sold (COGS)</span>
+              <span id="pnl-total-cogs">₹6,550.00</span>
+            </div>
+
+            <div class="pnl-section-title">III. GROSS PROFIT</div>
+            <div class="pnl-row bold highlight">
+              <span>Gross Profit (Revenue - COGS)</span>
+              <span id="pnl-gross-profit">₹5,731.25 (46.7%)</span>
+            </div>
+
+            <div class="pnl-section-title">IV. OPERATING EXPENSES</div>
+            <div class="pnl-row indent">
+              <span>Store Operations & Local Delivery Logistics</span>
+              <span id="pnl-opex-display">₹850.00</span>
+            </div>
+
+            <div class="pnl-row bold super-highlight">
+              <span>NET OPERATING PROFIT</span>
+              <span id="pnl-net-profit">₹4,881.25</span>
+            </div>
+          </div>
+        </div>
+      </section>"""
+
+# Replace sections using regex
+# 1. PNL
+html = re.sub(
+    r'<!-- TAB 2: ERPNEXT PROFIT & LOSS STATEMENT -->\s*<section id="tab-erp-pnl" class="tab-pane">[\s\S]*?</section>',
+    pnl_replacement,
+    html,
+    count=1
+)
+
+# 2. GST
+html = re.sub(
+    r'<!-- TAB 3: GST & INPUT TAX CREDIT \(ITC\) REPORT -->\s*<section id="tab-gst-itc" class="tab-pane">[\s\S]*?</section>',
+    gst_replacement,
+    html,
+    count=1
+)
+
+# 3. SALES
+html = re.sub(
+    r'<!-- TAB 4: SALES INVOICES -->\s*<section id="tab-sales" class="tab-pane">[\s\S]*?</section>',
+    sales_replacement,
+    html,
+    count=1
+)
+
+# 4. PURCHASES
+html = re.sub(
+    r'<!-- TAB 5: PURCHASE INVOICES \(WITH PER-ITEM GST\) -->\s*<section id="tab-purchases" class="tab-pane">[\s\S]*?</section>',
+    purchases_replacement,
+    html,
+    count=1
+)
+
+# 5. ITEMS
+html = re.sub(
+    r'<!-- TAB 6: MASTER ITEMS -->\s*<section id="tab-items" class="tab-pane active">[\s\S]*?</section>',
+    items_replacement,
+    html,
+    count=1
+)
+
+# 6. INVENTORY
+html = re.sub(
+    r'<!-- TAB 7: STOCK LEDGER -->\s*<section id="tab-inventory" class="tab-pane">[\s\S]*?</section>',
+    inventory_replacement,
+    html,
+    count=1
+)
+
+# Bump script version
+html = re.sub(r'app\.js\?v=[0-9\.]+', 'app.js?v=3.0.0', html)
+
+with open("index.html", "w", encoding="utf-8") as f:
+    f.write(html)
+
+with open("web/index.html", "w", encoding="utf-8") as f:
+    f.write(html)
+
+print("index.html and web/index.html successfully updated!")

@@ -1,9 +1,13 @@
 import os
 import json
 import datetime
+import csv
+import io
+import time
+from collections import defaultdict
 from pathlib import Path
 from typing import List, Dict, Any, Optional
-from fastapi import FastAPI, HTTPException, Query, Depends, status
+from fastapi import FastAPI, HTTPException, Query, Depends, status, Response, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, FileResponse, RedirectResponse
 from pydantic import BaseModel, Field
@@ -38,6 +42,45 @@ app.add_middleware(
 )
 
 # ---------------------------------------------------------------------------
+# Security & Performance Middleware (Zero-Cost Enterprise Hardening)
+# ---------------------------------------------------------------------------
+
+_RATE_LIMIT_STORE: Dict[str, List[float]] = defaultdict(list)
+_RATE_LIMIT_MAX = 120  # requests per minute per IP for sensitive endpoints
+
+@app.middleware("http")
+async def security_hardening_middleware(request: Request, call_next):
+    # 1. Sliding window rate limiting on sensitive auth endpoints
+    path = request.url.path
+    if path.startswith("/api/auth/login") or path.startswith("/api/auth/register"):
+        client_ip = request.client.host if request.client else "127.0.0.1"
+        now = time.time()
+        _RATE_LIMIT_STORE[client_ip] = [t for t in _RATE_LIMIT_STORE[client_ip] if now - t < 60]
+        if len(_RATE_LIMIT_STORE[client_ip]) >= _RATE_LIMIT_MAX:
+            return JSONResponse(
+                status_code=429,
+                content={"detail": "Too many requests. Rate limit exceeded for security."}
+            )
+        _RATE_LIMIT_STORE[client_ip].append(now)
+
+    # 2. Call handler
+    response = await call_next(request)
+
+    # 3. Inject strict security headers
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "geolocation=(), camera=(), microphone=()"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdnjs.cloudflare.com; "
+        "font-src 'self' data: https://cdnjs.cloudflare.com; "
+        "style-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; "
+        "img-src 'self' data: blob:;"
+    )
+    return response
+
+# ---------------------------------------------------------------------------
 # Pydantic Schemas / DTOs
 # ---------------------------------------------------------------------------
 
@@ -46,8 +89,8 @@ class ItemCreate(BaseModel):
     barcode: Optional[str] = None
     name: str
     description: Optional[str] = None
-    brand: str
-    category: str
+    brand: Optional[str] = "General"
+    category: Optional[str] = "General"
     price: float = Field(..., ge=0)
     cost_price: Optional[float] = Field(default=None, ge=0)
     gst_percent: float = Field(default=5.0, ge=0)
@@ -70,6 +113,19 @@ class CustomerCreate(BaseModel):
     city: str
     phone: str
     address: Optional[str] = None
+    credit_limit: Optional[float] = Field(default=10000.0, ge=0)
+
+class CustomerPayment(BaseModel):
+    amount: float = Field(..., gt=0)
+    payment_mode: Optional[str] = "CASH"
+    reference_no: Optional[str] = None
+    notes: Optional[str] = None
+
+class VendorPayment(BaseModel):
+    amount: float = Field(..., gt=0)
+    payment_mode: Optional[str] = "NEFT"
+    reference_no: Optional[str] = None
+    notes: Optional[str] = None
 
 # Standard GST State Code Mapping (2-digit GSTIN prefix -> State Name)
 GSTIN_STATE_CODES: Dict[str, str] = {
@@ -352,10 +408,23 @@ def get_stock_balances() -> Dict[str, float]:
 # ---------------------------------------------------------------------------
 
 @app.get("/api/items", tags=["2. Product Catalog"])
-def list_items(category: Optional[str] = None, search: Optional[str] = None, in_stock_only: Optional[bool] = False):
+def list_items(
+    category: Optional[str] = None,
+    search: Optional[str] = None,
+    brand: Optional[str] = None,
+    stock_status: Optional[str] = None,
+    in_stock_only: Optional[bool] = False,
+    min_price: Optional[float] = None,
+    max_price: Optional[float] = None,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "asc",
+    limit: Optional[int] = None,
+    offset: Optional[int] = 0
+):
     """
     List all products in catalog with real-time stock quantities on hand.
-    Supports filtering by category, search by item name/code/brand, and stock status.
+    Supports filtering by category, brand, search by item name/code/brand/barcode,
+    stock status (IN_STOCK, LOW_STOCK, OUT_OF_STOCK), price range, sorting, and pagination.
     """
     items = get_collection_data("items")
     balances = get_stock_balances()
@@ -373,8 +442,10 @@ def list_items(category: Optional[str] = None, search: Optional[str] = None, in_
         item_copy["stock_status"] = status_label
         enriched_items.append(item_copy)
 
-    if category:
+    if category and category.upper() != "ALL":
         enriched_items = [it for it in enriched_items if it.get("category", "").lower() == category.lower()]
+    if brand and brand.upper() != "ALL":
+        enriched_items = [it for it in enriched_items if it.get("brand", "").lower() == brand.lower()]
     if search:
         s = search.lower().strip()
         enriched_items = [
@@ -385,8 +456,25 @@ def list_items(category: Optional[str] = None, search: Optional[str] = None, in_
             or s in it.get("category", "").lower()
             or s in str(it.get("barcode", "")).lower()
         ]
-    if in_stock_only:
-        enriched_items = [it for it in enriched_items if it.get("in_stock")]
+    if in_stock_only or stock_status == "IN_STOCK":
+        enriched_items = [it for it in enriched_items if it.get("quantity_on_hand", 0) > 0]
+    elif stock_status == "LOW_STOCK":
+        enriched_items = [it for it in enriched_items if (it.get("stock_status") == "LOW_STOCK" or it.get("quantity_on_hand", 0) <= float(it.get("min_stock_alert") or 10.0))]
+    elif stock_status == "OUT_OF_STOCK":
+        enriched_items = [it for it in enriched_items if it.get("quantity_on_hand", 0) <= 0]
+
+    if min_price is not None:
+        enriched_items = [it for it in enriched_items if float(it.get("price") or 0.0) >= min_price]
+    if max_price is not None:
+        enriched_items = [it for it in enriched_items if float(it.get("price") or 0.0) <= max_price]
+
+    if sort_by:
+        reverse = (str(sort_order).lower() == "desc")
+        enriched_items.sort(key=lambda x: (x.get(sort_by) is None, x.get(sort_by)), reverse=reverse)
+
+    if limit is not None and limit > 0:
+        start = offset or 0
+        return enriched_items[start : start + limit]
 
     return enriched_items
 
@@ -484,7 +572,12 @@ def update_item(item_code: str, update: ItemUpdate, user: Dict[str, Any] = Depen
     target.update(update_data)
     target["updated_at"] = datetime.datetime.now(datetime.timezone.utc).isoformat()
     save_collection_doc("items", target)
-    return {"message": "Item updated successfully", "item": target}
+
+    # Automatic BigQuery Sync on update
+    wh = get_warehouse_backend()
+    bq_sync_result = _BQ_SYNC_SERVICE.sync_item(target, wh)
+
+    return {"message": "Item updated successfully", "item": target, "bigquery_sync": bq_sync_result}
 
 @app.delete("/api/items/{item_code}", tags=["2. Product Catalog"])
 def delete_item(item_code: str, user: Dict[str, Any] = Depends(require_roles(UserRole.ADMIN))):
@@ -569,6 +662,73 @@ def get_low_stock_alerts():
         for a in alerts
     ]
 
+@app.get("/api/stock/auto-reorder-draft", tags=["3. Inventory Management"], summary="Auto-generate draft purchase order for low-stock items")
+def get_auto_reorder_draft():
+    """
+    Supermarket Auto-PO Reorder Generation:
+    Identifies all SKUs at or below safety stock threshold, calculates economic restock quantities,
+    matches with previous vendors, and prepares draft line items for 1-click purchase invoice generation.
+    """
+    low_stock = get_stock_position(low_stock_only=True)
+    purchases = get_collection_data("purchase_invoice")
+    vendors = get_collection_data("vendors") or []
+
+    # Map item_code -> last vendor
+    item_vendor_map = {}
+    for p in sorted(purchases, key=lambda x: str(x.get("invoice_date", "")), reverse=True):
+        vnd = p.get("vendor")
+        for it in p.get("items", []):
+            icode = it.get("item_code")
+            if icode and icode not in item_vendor_map:
+                item_vendor_map[icode] = vnd
+
+    default_vendor = vendors[0]["name"] if vendors else "KR Agro Supplies"
+
+    draft_items = []
+    total_estimated_cost = 0.0
+    primary_vendor_votes = defaultdict(int)
+
+    for item in low_stock:
+        icode = item["item_code"]
+        current_qty = item["quantity_on_hand"]
+        min_alert = item["min_stock_alert"]
+        # Target stock = 3x safety stock
+        target_qty = max(min_alert * 3.0, 20.0)
+        reorder_qty = max(5.0, round(target_qty - max(0.0, current_qty), 0))
+
+        cost_rate = item.get("cost_valuation", 0.0) / current_qty if current_qty > 0 else (item["price"] * 0.75)
+        cost_rate = round(cost_rate or (item["price"] * 0.75), 2)
+        line_cost = round(reorder_qty * cost_rate, 2)
+        total_estimated_cost += line_cost
+
+        pref_vendor = item_vendor_map.get(icode, default_vendor)
+        primary_vendor_votes[pref_vendor] += 1
+
+        draft_items.append({
+            "item_code": icode,
+            "item_name": item["name"],
+            "item_description": f"Restock to safety buffer (Current: {current_qty}, Alert: {min_alert})",
+            "current_stock": current_qty,
+            "min_stock_alert": min_alert,
+            "suggested_quantity": reorder_qty,
+            "quantity": reorder_qty,
+            "estimated_rate": cost_rate,
+            "rate": cost_rate,
+            "gst_percent": 5.0,
+            "preferred_vendor": pref_vendor,
+            "estimated_cost": line_cost
+        })
+
+    suggested_vendor = max(primary_vendor_votes, key=primary_vendor_votes.get) if primary_vendor_votes else default_vendor
+
+    return {
+        "status": "ready",
+        "low_stock_count": len(low_stock),
+        "suggested_vendor": suggested_vendor,
+        "total_estimated_cost": round(total_estimated_cost, 2),
+        "items": draft_items
+    }
+
 @app.post("/api/stock/adjust", tags=["3. Inventory Management"])
 def adjust_stock(adj: StockAdjustment, user: Dict[str, Any] = Depends(require_roles(UserRole.ADMIN, UserRole.STORE_MANAGER))):
     """Audit stock adjustments (damage, physical audit counts, expiry writes)."""
@@ -591,7 +751,76 @@ def adjust_stock(adj: StockAdjustment, user: Dict[str, Any] = Depends(require_ro
         "updated_at": now
     }
     save_collection_doc("stock_ledger", entry)
-    return {"message": "Stock adjustment recorded in audit ledger", "entry": entry}
+    
+    # Automatic BigQuery Sync for Stock Movement
+    wh = get_warehouse_backend()
+    bq_sync_result = _BQ_SYNC_SERVICE.sync_stock_ledger_entries([entry], wh)
+
+    return {"message": "Stock adjustment recorded in audit ledger", "entry": entry, "bigquery_sync": bq_sync_result}
+
+@app.get("/api/stock/ledger", tags=["3. Inventory Management"], summary="List inventory movement audit ledger")
+@app.get("/api/inventory/ledger", tags=["3. Inventory Management"], include_in_schema=False)
+def list_stock_ledger(
+    search: Optional[str] = None,
+    item_code: Optional[str] = None,
+    movement_type: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "desc",
+    limit: Optional[int] = None,
+    offset: Optional[int] = 0
+):
+    """
+    List inventory movement audit ledger with filtering by search, item_code,
+    movement type (IN / OUT), date range, sorting, and pagination.
+    """
+    ledger = get_collection_data("stock_ledger")
+
+    if search:
+        s = search.lower().strip()
+        ledger = [
+            e for e in ledger
+            if s in str(e.get("item_code", "")).lower()
+            or s in str(e.get("item_name", "")).lower()
+            or s in str(e.get("voucher_no", "")).lower()
+            or s in str(e.get("transaction_type", "")).lower()
+        ]
+
+    if item_code and item_code.upper() != "ALL":
+        ledger = [e for e in ledger if str(e.get("item_code", "")).lower() == item_code.lower()]
+
+    if movement_type and movement_type.upper() != "ALL":
+        mt = movement_type.upper()
+        filtered_ledger = []
+        for e in ledger:
+            raw_tx = str(e.get("transaction_type") or "").upper()
+            raw_mv = str(e.get("movement_type") or "").upper()
+            if mt == "IN":
+                if "IN" in raw_tx or "IN" in raw_mv or "ADD" in raw_tx or "PURCHASE" in raw_tx or "OPENING" in raw_tx:
+                    filtered_ledger.append(e)
+            elif mt == "OUT":
+                if "OUT" in raw_tx or "OUT" in raw_mv or "DEDUCT" in raw_tx or "SALE" in raw_tx or "DAMAGE" in raw_tx:
+                    filtered_ledger.append(e)
+        ledger = filtered_ledger
+
+    if start_date:
+        ledger = [e for e in ledger if str(e.get("date", "")) >= start_date]
+    if end_date:
+        ledger = [e for e in ledger if str(e.get("date", "")) <= end_date]
+
+    if sort_by:
+        reverse = (str(sort_order).lower() == "desc")
+        ledger.sort(key=lambda x: (x.get(sort_by) is None, x.get(sort_by)), reverse=reverse)
+    else:
+        # Default sort by date desc
+        ledger.sort(key=lambda x: str(x.get("date", "")), reverse=(str(sort_order).lower() != "asc"))
+
+    if limit is not None and limit > 0:
+        start = offset or 0
+        return ledger[start : start + limit]
+
+    return ledger
 
 # ---------------------------------------------------------------------------
 # MODULE 4: SUPPLIER & PURCHASE MANAGEMENT
@@ -623,9 +852,99 @@ def create_vendor(vendor: VendorCreate, user: Dict[str, Any] = Depends(require_r
 
 @app.get("/api/purchases", tags=["4. Supplier & Purchases"], summary="List vendor procurement invoices")
 @app.get("/api/purchases/invoices", tags=["4. Supplier & Purchases"], include_in_schema=False)
-def list_purchases():
-    """List all vendor purchase invoices (with per-item GST and Input Tax Credit details)."""
-    return get_collection_data("purchase_invoice")
+def list_purchases(
+    search: Optional[str] = None,
+    vendor: Optional[str] = None,
+    payment_status: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    min_amount: Optional[float] = None,
+    max_amount: Optional[float] = None,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "desc",
+    limit: Optional[int] = None,
+    offset: Optional[int] = 0
+):
+    """
+    List all vendor purchase invoices with optional search, vendor filter, payment status,
+    date range (start_date/end_date), amount range, sorting, and pagination.
+    """
+    invoices = get_collection_data("purchase_invoice")
+
+    enriched_invoices = []
+    for raw_inv in invoices:
+        inv = dict(raw_inv)
+        items = inv.get("items") or []
+        net = float(inv.get("net_amount") or 0.0)
+        gst = float(inv.get("gst_amount") or 0.0)
+        tot = float(inv.get("total_amount") or 0.0)
+        if tot <= 0 and items:
+            net = sum(float(it.get("net_amount") or (float(it.get("quantity", 0)) * float(it.get("rate", 0)))) for it in items)
+            gst = sum(float(it.get("gst_amount") or (float(it.get("quantity", 0)) * float(it.get("rate", 0)) * (float(it.get("gst_percent", 0)) / 100.0))) for it in items)
+            tot = net + gst
+        inv["net_amount"] = round(net, 2)
+        inv["gst_amount"] = round(gst, 2)
+        inv["total_amount"] = round(tot, 2)
+
+        # Payment status & Accounts Payable calculations
+        paid = float(inv.get("amount_paid") or (tot if inv.get("payment_status") == "PAID" else 0.0))
+        if paid >= tot and tot > 0:
+            status_calc = "PAID"
+        elif paid > 0:
+            status_calc = "PARTIAL"
+        else:
+            status_calc = inv.get("payment_status") or "UNPAID"
+        inv["payment_status"] = status_calc
+        inv["amount_paid"] = round(paid, 2)
+        inv["balance_due"] = round(max(0.0, tot - paid), 2)
+
+        enriched_invoices.append(inv)
+    invoices = enriched_invoices
+
+    if search:
+        s = search.lower().strip()
+        filtered = []
+        for inv in invoices:
+            inv_no = str(inv.get("invoice_no") or inv.get("_id") or "").lower()
+            vnd = str(inv.get("vendor") or "").lower()
+            items = inv.get("items") or []
+            item_match = any(
+                s in str(it.get("item_code", "")).lower() or s in str(it.get("item_name", "")).lower()
+                for it in items
+            )
+            legacy_item = s in str(inv.get("item_name", "")).lower() or s in str(inv.get("item_code", "")).lower()
+            if s in inv_no or s in vnd or item_match or legacy_item:
+                filtered.append(inv)
+        invoices = filtered
+
+    if vendor and vendor.upper() != "ALL":
+        invoices = [inv for inv in invoices if str(inv.get("vendor", "")).lower() == vendor.lower()]
+
+    if payment_status and payment_status.upper() != "ALL":
+        invoices = [inv for inv in invoices if str(inv.get("payment_status", "")).upper() == payment_status.upper()]
+
+    if start_date:
+        invoices = [inv for inv in invoices if str(inv.get("invoice_date", "")) >= start_date]
+    if end_date:
+        invoices = [inv for inv in invoices if str(inv.get("invoice_date", "")) <= end_date]
+
+    if min_amount is not None:
+        invoices = [inv for inv in invoices if float(inv.get("total_amount") or 0.0) >= min_amount]
+    if max_amount is not None:
+        invoices = [inv for inv in invoices if float(inv.get("total_amount") or 0.0) <= max_amount]
+
+    if sort_by:
+        reverse = (str(sort_order).lower() == "desc")
+        invoices.sort(key=lambda x: (x.get(sort_by) is None, x.get(sort_by)), reverse=reverse)
+    else:
+        # Default order by invoice_date desc
+        invoices.sort(key=lambda x: str(x.get("invoice_date", "")), reverse=(str(sort_order).lower() != "asc"))
+
+    if limit is not None and limit > 0:
+        start = offset or 0
+        return invoices[start : start + limit]
+
+    return invoices
 
 @app.post("/api/purchases/invoice", tags=["4. Supplier & Purchases"], summary="Record vendor procurement invoice (increases stock & books ITC)")
 @app.post("/api/purchases/invoices", tags=["4. Supplier & Purchases"], include_in_schema=False)
@@ -693,9 +1012,10 @@ def create_purchase_invoice(pur: PurchaseInvoiceCreate, user: Dict[str, Any] = D
     for se in stock_entries:
         save_collection_doc("stock_ledger", se)
 
-    # Immediate streaming replication of purchase line items into BigQuery warehouse
+    # Immediate streaming replication of purchase line items and stock movements into BigQuery warehouse
     wh = get_warehouse_backend()
     bq_sync_result = _BQ_SYNC_SERVICE.sync_purchase_invoice(purchase_doc, wh)
+    _BQ_SYNC_SERVICE.sync_stock_ledger_entries(stock_entries, wh)
 
     return {
         "message": "Purchase invoice registered and stock IN logged",
@@ -705,6 +1025,59 @@ def create_purchase_invoice(pur: PurchaseInvoiceCreate, user: Dict[str, Any] = D
         "bigquery_sync": bq_sync_result
     }
 
+@app.post("/api/purchases/{invoice_no}/payment", tags=["4. Supplier & Purchases"], summary="Record payment against vendor purchase bill")
+def record_purchase_payment(invoice_no: str, payment: VendorPayment, user: Dict[str, Any] = Depends(require_roles(UserRole.ADMIN, UserRole.STORE_MANAGER))):
+    """
+    Record vendor payment (NEFT, UPI, Cheque, Cash) against a purchase invoice.
+    Updates amount_paid, recalculates payment_status, and maintains audit history.
+    """
+    invoices = get_collection_data("purchase_invoice")
+    target = None
+    for inv in invoices:
+        if str(inv.get("invoice_no") or inv.get("_id")) == str(invoice_no):
+            target = inv
+            break
+    
+    if not target:
+        raise HTTPException(status_code=404, detail=f"Purchase invoice '{invoice_no}' not found")
+    
+    tot = float(target.get("total_amount") or 0.0)
+    current_paid = float(target.get("amount_paid") or (tot if target.get("payment_status") == "PAID" else 0.0))
+    new_paid = round(current_paid + payment.amount, 2)
+    
+    payments_history = target.get("payments", [])
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    payments_history.append({
+        "payment_id": f"VPAY-{int(time.time()*1000)}",
+        "amount": payment.amount,
+        "payment_mode": payment.payment_mode,
+        "reference_no": payment.reference_no,
+        "notes": payment.notes,
+        "recorded_by": user.get("username", "admin"),
+        "timestamp": now
+    })
+    
+    target["amount_paid"] = new_paid
+    target["payments"] = payments_history
+    if new_paid >= tot:
+        target["payment_status"] = "PAID"
+    elif new_paid > 0:
+        target["payment_status"] = "PARTIAL"
+    else:
+        target["payment_status"] = "UNPAID"
+    target["updated_at"] = now
+    
+    save_collection_doc("purchase_invoice", target)
+    return {
+        "message": "Vendor payment recorded successfully",
+        "invoice_no": invoice_no,
+        "amount_paid": new_paid,
+        "total_amount": tot,
+        "balance_due": round(max(0.0, tot - new_paid), 2),
+        "payment_status": target["payment_status"],
+        "latest_payment": payments_history[-1]
+    }
+
 # ---------------------------------------------------------------------------
 # MODULE 5: CUSTOMER MANAGEMENT
 # ---------------------------------------------------------------------------
@@ -712,10 +1085,53 @@ def create_purchase_invoice(pur: PurchaseInvoiceCreate, user: Dict[str, Any] = D
 @app.get("/api/customers", tags=["5. Customers"], summary="List & search customer directory")
 def list_customers(search: Optional[str] = None, phone: Optional[str] = None):
     """
-    List registered customers. Supports unified search filter across name, phone, city, or ID,
-    as well as dedicated ?phone= lookup for POS counter terminals.
+    List registered customers with real-time credit ledger, outstanding balance,
+    and credit limit calculations. Supports unified search filter across name, phone, city, or ID.
     """
     customers = get_collection_data("customers")
+    sales = get_collection_data("sales_invoice")
+    all_payments = get_collection_data("customer_payments")
+
+    # Map customer_id -> total_sales, credit_sales, payments
+    customer_stats = defaultdict(lambda: {"total_sales": 0.0, "credit_sales": 0.0, "paid": 0.0})
+    for s in sales:
+        cid = s.get("customer", {}).get("id") or s.get("customer_id")
+        amt = float(s.get("total_amount") or 0.0)
+        mode = str(s.get("payment_mode") or "CASH").upper()
+        if cid:
+            customer_stats[cid]["total_sales"] += amt
+            if mode == "CREDIT":
+                customer_stats[cid]["credit_sales"] += amt
+        cname = str(s.get("customer_name") or "").lower()
+        if cname:
+            customer_stats[cname]["total_sales"] += amt
+            if mode == "CREDIT":
+                customer_stats[cname]["credit_sales"] += amt
+
+    for p in all_payments:
+        cid = p.get("customer_id")
+        amt = float(p.get("amount") or 0.0)
+        if cid:
+            customer_stats[cid]["paid"] += amt
+
+    enriched = []
+    for c in customers:
+        cdoc = dict(c)
+        cid = cdoc.get("customer_id") or cdoc.get("_id")
+        cname = str(cdoc.get("name", "")).lower()
+        stats = customer_stats.get(cid) or customer_stats.get(cname) or {"total_sales": 0.0, "credit_sales": 0.0, "paid": 0.0}
+        credit_limit = float(cdoc.get("credit_limit") or 10000.0)
+        dues = round(max(0.0, stats["credit_sales"] - stats["paid"]), 2)
+        cdoc["credit_limit"] = credit_limit
+        cdoc["total_sales"] = round(stats["total_sales"], 2)
+        cdoc["credit_sales"] = round(stats["credit_sales"], 2)
+        cdoc["total_paid"] = round(stats["paid"], 2)
+        cdoc["outstanding_dues"] = dues
+        cdoc["available_credit"] = round(max(0.0, credit_limit - dues), 2)
+        cdoc["dues_status"] = "CLEAR" if dues == 0 else ("OVERDUE" if dues > credit_limit else "PENDING_DUES")
+        enriched.append(cdoc)
+    customers = enriched
+
     if phone:
         customers = [c for c in customers if c.get("phone") == phone]
     if search:
@@ -738,7 +1154,12 @@ def create_customer(customer: CustomerCreate):
     new_doc["created_at"] = now
     new_doc["updated_at"] = now
     save_collection_doc("customers", new_doc)
-    return {"message": "Customer registered successfully", "customer": new_doc}
+
+    # Automatic BigQuery Sync for Customers
+    wh = get_warehouse_backend()
+    bq_sync_result = _BQ_SYNC_SERVICE.sync_customer(new_doc, wh)
+
+    return {"message": "Customer registered successfully", "customer": new_doc, "bigquery_sync": bq_sync_result}
 
 @app.get("/api/customers/search", tags=["5. Customers"], deprecated=True, summary="Search customer by phone (Consolidated alias)")
 def search_customer_by_phone(phone: str):
@@ -751,15 +1172,223 @@ def search_customer_by_phone(phone: str):
         return matches[0]
     raise HTTPException(status_code=404, detail="Customer not found with given phone number")
 
+@app.get("/api/customers/{customer_id}/ledger", tags=["5. Customers"], summary="Detailed customer credit & payment ledger")
+def get_customer_ledger(customer_id: str):
+    """
+    Supermarket Khata / Credit Ledger:
+    Returns full ledger history of credit sales and payments for a customer,
+    including current outstanding dues and available credit limit.
+    """
+    customers = get_collection_data("customers")
+    customer = None
+    for c in customers:
+        if c.get("customer_id") == customer_id or c.get("_id") == customer_id:
+            customer = c
+            break
+    if not customer:
+        raise HTTPException(status_code=404, detail=f"Customer '{customer_id}' not found")
+
+    cust_name = str(customer.get("name", "")).lower()
+    sales = get_collection_data("sales_invoice")
+    all_payments = get_collection_data("customer_payments")
+
+    # Filter sales for customer
+    cust_sales = [
+        s for s in sales
+        if (s.get("customer", {}).get("id") == customer_id or 
+            s.get("customer_id") == customer_id or 
+            str(s.get("customer_name", "")).lower() == cust_name)
+    ]
+
+    # Filter payments for customer
+    cust_payments = [
+        p for p in all_payments
+        if p.get("customer_id") == customer_id or p.get("customer_id") == customer.get("_id")
+    ]
+
+    total_sales_amount = sum(float(s.get("total_amount") or 0.0) for s in cust_sales)
+    credit_sales = [s for s in cust_sales if str(s.get("payment_mode", "")).upper() == "CREDIT"]
+    total_credit_amount = sum(float(s.get("total_amount") or 0.0) for s in credit_sales)
+    total_paid = sum(float(p.get("amount") or 0.0) for p in cust_payments)
+
+    credit_limit = float(customer.get("credit_limit") or 10000.0)
+    outstanding_dues = round(max(0.0, total_credit_amount - total_paid), 2)
+    available_credit = round(max(0.0, credit_limit - outstanding_dues), 2)
+
+    transactions = []
+    for s in cust_sales:
+        transactions.append({
+            "type": "SALE_INVOICE",
+            "ref_no": s.get("invoice_no") or s.get("_id"),
+            "date": s.get("invoice_date") or s.get("created_at", "")[:10],
+            "debit": float(s.get("total_amount") or 0.0),
+            "credit": 0.0,
+            "payment_mode": s.get("payment_mode", "CASH"),
+            "items_count": len(s.get("items", [])) or 1
+        })
+    for p in cust_payments:
+        transactions.append({
+            "type": "PAYMENT_RECEIVED",
+            "ref_no": p.get("payment_id") or p.get("_id"),
+            "date": p.get("date") or p.get("timestamp", "")[:10],
+            "debit": 0.0,
+            "credit": float(p.get("amount") or 0.0),
+            "payment_mode": p.get("payment_mode", "CASH"),
+            "notes": p.get("notes", "")
+        })
+
+    transactions.sort(key=lambda x: str(x.get("date", "")), reverse=True)
+
+    return {
+        "customer": customer,
+        "credit_limit": credit_limit,
+        "total_sales_amount": round(total_sales_amount, 2),
+        "total_credit_amount": round(total_credit_amount, 2),
+        "total_paid": round(total_paid, 2),
+        "outstanding_dues": outstanding_dues,
+        "available_credit": available_credit,
+        "dues_status": "CLEAR" if outstanding_dues == 0 else ("OVERDUE" if outstanding_dues > credit_limit else "PENDING_DUES"),
+        "transactions": transactions
+    }
+
+@app.post("/api/customers/{customer_id}/payment", tags=["5. Customers"], summary="Record customer credit repayment")
+def record_customer_payment(customer_id: str, payment: CustomerPayment, user: Dict[str, Any] = Depends(require_roles(UserRole.ADMIN, UserRole.STORE_MANAGER, UserRole.CASHIER))):
+    """
+    Record payment received against customer credit account.
+    Reduces outstanding balance and adds entry to customer_payments audit ledger.
+    """
+    customers = get_collection_data("customers")
+    customer = None
+    for c in customers:
+        if c.get("customer_id") == customer_id or c.get("_id") == customer_id:
+            customer = c
+            break
+    if not customer:
+        raise HTTPException(status_code=404, detail=f"Customer '{customer_id}' not found")
+
+    now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    payment_doc = {
+        "_id": f"PAY-{customer_id}-{int(time.time()*1000)}",
+        "payment_id": f"CPAY-{int(time.time()*1000)}",
+        "customer_id": customer_id,
+        "customer_name": customer.get("name"),
+        "amount": round(payment.amount, 2),
+        "payment_mode": payment.payment_mode or "CASH",
+        "reference_no": payment.reference_no or "",
+        "notes": payment.notes or "Credit balance settlement",
+        "date": now[:10],
+        "recorded_by": user.get("username", "cashier1"),
+        "created_at": now,
+        "updated_at": now
+    }
+
+    save_collection_doc("customer_payments", payment_doc)
+
+    updated_ledger = get_customer_ledger(customer_id)
+    return {
+        "message": f"Payment of ₹{payment.amount:.2f} recorded for {customer.get('name')}",
+        "payment": payment_doc,
+        "outstanding_dues": updated_ledger["outstanding_dues"],
+        "available_credit": updated_ledger["available_credit"]
+    }
+
 # ---------------------------------------------------------------------------
 # MODULE 6: SALES & POS BILLING MANAGEMENT
 # ---------------------------------------------------------------------------
 
 @app.get("/api/sales", tags=["6. Sales & POS Billing"], summary="List customer sales invoices")
 @app.get("/api/sales/invoices", tags=["6. Sales & POS Billing"], include_in_schema=False)
-def list_sales():
-    """List sales invoices."""
-    return get_collection_data("sales_invoice")
+def list_sales(
+    search: Optional[str] = None,
+    customer: Optional[str] = None,
+    city: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    min_amount: Optional[float] = None,
+    max_amount: Optional[float] = None,
+    sort_by: Optional[str] = None,
+    sort_order: Optional[str] = "desc",
+    limit: Optional[int] = None,
+    offset: Optional[int] = 0
+):
+    """
+    List sales invoices with optional search, customer filter, city filter,
+    date range (start_date/end_date), amount range, sorting, and pagination.
+    """
+    invoices = get_collection_data("sales_invoice")
+
+    enriched_invoices = []
+    for raw_inv in invoices:
+        inv = dict(raw_inv)
+        items = inv.get("items") or []
+        net = float(inv.get("net_amount") or 0.0)
+        gst = float(inv.get("gst_amount") or 0.0)
+        tot = float(inv.get("total_amount") or 0.0)
+        if tot <= 0:
+            if items:
+                net = sum(float(it.get("net_amount") or (float(it.get("quantity", 0)) * float(it.get("rate", 0)))) for it in items)
+                gst = sum(float(it.get("gst_amount") or (float(it.get("quantity", 0)) * float(it.get("rate", 0)) * (float(it.get("gst_percent", 0)) / 100.0))) for it in items)
+            else:
+                net = float(inv.get("net_amount") or (float(inv.get("quantity", 0)) * float(inv.get("rate", 0))))
+                gst = float(inv.get("gst_amount") or (net * (float(inv.get("gst_percent", 5.0)) / 100.0)))
+            tot = net + gst
+        inv["net_amount"] = round(net, 2)
+        inv["gst_amount"] = round(gst, 2)
+        inv["total_amount"] = round(tot, 2)
+        enriched_invoices.append(inv)
+    invoices = enriched_invoices
+
+    if search:
+        s = search.lower().strip()
+        filtered = []
+        for inv in invoices:
+            inv_no = str(inv.get("invoice_no") or inv.get("_id") or "").lower()
+            cust = str(inv.get("customer_name") or (inv.get("customer") or {}).get("name", "")).lower()
+            city_val = str(inv.get("customer_city") or (inv.get("customer") or {}).get("city", "")).lower()
+            items = inv.get("items") or []
+            item_match = any(
+                s in str(it.get("item_code", "")).lower() or s in str(it.get("item_name", "")).lower()
+                for it in items
+            )
+            legacy_item = s in str(inv.get("item_name", "")).lower() or s in str(inv.get("item_code", "")).lower()
+            if s in inv_no or s in cust or s in city_val or item_match or legacy_item:
+                filtered.append(inv)
+        invoices = filtered
+
+    if customer and customer.upper() != "ALL":
+        invoices = [
+            inv for inv in invoices
+            if str(inv.get("customer_name") or (inv.get("customer") or {}).get("name", "")).lower() == customer.lower()
+        ]
+
+    if city and city.upper() != "ALL":
+        invoices = [
+            inv for inv in invoices
+            if str(inv.get("customer_city") or (inv.get("customer") or {}).get("city", "")).lower() == city.lower()
+        ]
+
+    if start_date:
+        invoices = [inv for inv in invoices if str(inv.get("invoice_date", "")) >= start_date]
+    if end_date:
+        invoices = [inv for inv in invoices if str(inv.get("invoice_date", "")) <= end_date]
+
+    if min_amount is not None:
+        invoices = [inv for inv in invoices if float(inv.get("total_amount") or 0.0) >= min_amount]
+    if max_amount is not None:
+        invoices = [inv for inv in invoices if float(inv.get("total_amount") or 0.0) <= max_amount]
+
+    if sort_by:
+        reverse = (str(sort_order).lower() == "desc")
+        invoices.sort(key=lambda x: (x.get(sort_by) is None, x.get(sort_by)), reverse=reverse)
+    else:
+        # Default order by invoice_date desc
+        invoices.sort(key=lambda x: str(x.get("invoice_date", "")), reverse=(str(sort_order).lower() != "asc"))
+
+    if limit is not None and limit > 0:
+        start = offset or 0
+        return invoices[start : start + limit]
+
+    return invoices
 
 @app.get("/api/sales/returns", tags=["6. Sales & POS Billing"])
 def list_sales_returns():
@@ -770,6 +1399,27 @@ def list_sales_returns():
 def get_sales_invoice(invoice_no: str):
     """Get single sales invoice by invoice_no."""
     invoices = get_collection_data("sales_invoice")
+
+    enriched_invoices = []
+    for raw_inv in invoices:
+        inv = dict(raw_inv)
+        items = inv.get("items") or []
+        net = float(inv.get("net_amount") or 0.0)
+        gst = float(inv.get("gst_amount") or 0.0)
+        tot = float(inv.get("total_amount") or 0.0)
+        if tot <= 0:
+            if items:
+                net = sum(float(it.get("net_amount") or (float(it.get("quantity", 0)) * float(it.get("rate", 0)))) for it in items)
+                gst = sum(float(it.get("gst_amount") or (float(it.get("quantity", 0)) * float(it.get("rate", 0)) * (float(it.get("gst_percent", 0)) / 100.0))) for it in items)
+            else:
+                net = float(inv.get("net_amount") or (float(inv.get("quantity", 0)) * float(inv.get("rate", 0))))
+                gst = float(inv.get("gst_amount") or (net * (float(inv.get("gst_percent", 5.0)) / 100.0)))
+            tot = net + gst
+        inv["net_amount"] = round(net, 2)
+        inv["gst_amount"] = round(gst, 2)
+        inv["total_amount"] = round(tot, 2)
+        enriched_invoices.append(inv)
+    invoices = enriched_invoices
     for inv in invoices:
         if inv.get("invoice_no") == invoice_no or inv.get("_id") == invoice_no:
             return inv
@@ -904,11 +1554,17 @@ def create_sales_invoice(sale: SalesInvoiceCreate, user: Dict[str, Any] = Depend
     for se in stock_entries:
         save_collection_doc("stock_ledger", se)
 
+    # Automatic BigQuery Sync: Sales Invoice line items & stock movement OUT
+    wh = get_warehouse_backend()
+    bq_sales_sync = _BQ_SYNC_SERVICE.sync_sales_invoice(invoice_doc, wh)
+    _BQ_SYNC_SERVICE.sync_stock_ledger_entries(stock_entries, wh)
+
     return {
         "message": "Sales invoice created and stock OUT logged",
         "invoice": invoice_doc,
         "stock_ledger_entry": stock_entries[0] if len(stock_entries) == 1 else None,
-        "stock_ledger_entries": stock_entries
+        "stock_ledger_entries": stock_entries,
+        "bigquery_sync": bq_sales_sync
     }
 
 @app.post("/api/sales/{invoice_no}/return", tags=["6. Sales & POS Billing"], summary="Process product return, refund & audit stock restoration")
@@ -923,6 +1579,27 @@ def process_sales_return(
     logs stock return into the audit ledger, and records the refund.
     """
     invoices = get_collection_data("sales_invoice")
+
+    enriched_invoices = []
+    for raw_inv in invoices:
+        inv = dict(raw_inv)
+        items = inv.get("items") or []
+        net = float(inv.get("net_amount") or 0.0)
+        gst = float(inv.get("gst_amount") or 0.0)
+        tot = float(inv.get("total_amount") or 0.0)
+        if tot <= 0:
+            if items:
+                net = sum(float(it.get("net_amount") or (float(it.get("quantity", 0)) * float(it.get("rate", 0)))) for it in items)
+                gst = sum(float(it.get("gst_amount") or (float(it.get("quantity", 0)) * float(it.get("rate", 0)) * (float(it.get("gst_percent", 0)) / 100.0))) for it in items)
+            else:
+                net = float(inv.get("net_amount") or (float(inv.get("quantity", 0)) * float(inv.get("rate", 0))))
+                gst = float(inv.get("gst_amount") or (net * (float(inv.get("gst_percent", 5.0)) / 100.0)))
+            tot = net + gst
+        inv["net_amount"] = round(net, 2)
+        inv["gst_amount"] = round(gst, 2)
+        inv["total_amount"] = round(tot, 2)
+        enriched_invoices.append(inv)
+    invoices = enriched_invoices
     orig_inv = None
     for inv in invoices:
         if inv.get("invoice_no") == invoice_no or inv.get("_id") == invoice_no:
@@ -1219,6 +1896,27 @@ def print_invoice_custom(req: PrintInvoiceRequest):
 def print_existing_sales_invoice(invoice_no: str):
     """Look up an existing sales invoice by number and render its printable commercial invoice."""
     invoices = get_collection_data("sales_invoice")
+
+    enriched_invoices = []
+    for raw_inv in invoices:
+        inv = dict(raw_inv)
+        items = inv.get("items") or []
+        net = float(inv.get("net_amount") or 0.0)
+        gst = float(inv.get("gst_amount") or 0.0)
+        tot = float(inv.get("total_amount") or 0.0)
+        if tot <= 0:
+            if items:
+                net = sum(float(it.get("net_amount") or (float(it.get("quantity", 0)) * float(it.get("rate", 0)))) for it in items)
+                gst = sum(float(it.get("gst_amount") or (float(it.get("quantity", 0)) * float(it.get("rate", 0)) * (float(it.get("gst_percent", 0)) / 100.0))) for it in items)
+            else:
+                net = float(inv.get("net_amount") or (float(inv.get("quantity", 0)) * float(inv.get("rate", 0))))
+                gst = float(inv.get("gst_amount") or (net * (float(inv.get("gst_percent", 5.0)) / 100.0)))
+            tot = net + gst
+        inv["net_amount"] = round(net, 2)
+        inv["gst_amount"] = round(gst, 2)
+        inv["total_amount"] = round(tot, 2)
+        enriched_invoices.append(inv)
+    invoices = enriched_invoices
     target = None
     for inv in invoices:
         if inv.get("invoice_no") == invoice_no or inv.get("_id") == invoice_no:
@@ -1458,6 +2156,23 @@ def print_existing_purchase_invoice(invoice_no: str):
     # | Item name | Item description(Optional) | quantity | price | tax | (total=(price+tax)*quantity)
     """
     invoices = get_collection_data("purchase_invoice")
+
+    enriched_invoices = []
+    for raw_inv in invoices:
+        inv = dict(raw_inv)
+        items = inv.get("items") or []
+        net = float(inv.get("net_amount") or 0.0)
+        gst = float(inv.get("gst_amount") or 0.0)
+        tot = float(inv.get("total_amount") or 0.0)
+        if tot <= 0 and items:
+            net = sum(float(it.get("net_amount") or (float(it.get("quantity", 0)) * float(it.get("rate", 0)))) for it in items)
+            gst = sum(float(it.get("gst_amount") or (float(it.get("quantity", 0)) * float(it.get("rate", 0)) * (float(it.get("gst_percent", 0)) / 100.0))) for it in items)
+            tot = net + gst
+        inv["net_amount"] = round(net, 2)
+        inv["gst_amount"] = round(gst, 2)
+        inv["total_amount"] = round(tot, 2)
+        enriched_invoices.append(inv)
+    invoices = enriched_invoices
     target = None
     for inv in invoices:
         if inv.get("invoice_no") == invoice_no or inv.get("_id") == invoice_no:
@@ -1522,6 +2237,8 @@ def get_pnl_statement(operating_expenses: float = Query(850.0)):
     ERPNext Profit & Loss Statement:
     Revenue, Cost of Goods Sold (COGS), Gross Profit, Operating Expenses, and Net Operating Profit.
     """
+    if not isinstance(operating_expenses, (int, float)):
+        operating_expenses = 850.0
     items = get_collection_data("items")
     sales = get_collection_data("sales_invoice")
     purchases = get_collection_data("purchase_invoice")
@@ -1549,6 +2266,267 @@ def get_executive_summary():
         "gst_summary": gst_rep,
         "status": "OPERATIONAL"
     }
+
+@app.get("/api/analytics/dashboard", tags=["8. Tax & Financial Reports"], summary="Real-time multi-dimensional analytics for dashboard charts")
+def get_analytics_dashboard():
+    """
+    Returns zero-latency aggregated analytical metrics for pure SVG charts:
+    1. Daily sales revenue trend for last 7 days.
+    2. Category-wise sales breakdown.
+    3. Real-time stock health status.
+    4. Top 5 bestselling SKUs.
+    5. Receivables vs Payables working capital overview.
+    """
+    sales = get_collection_data("sales_invoice")
+    purchases = get_collection_data("purchase_invoice")
+    items = get_collection_data("items")
+    stock_balances = get_stock_balances()
+
+    # 1. Sales Trend (group by invoice_date)
+    sales_by_date = defaultdict(lambda: {"revenue": 0.0, "count": 0})
+    for s in sales:
+        dt = str(s.get("invoice_date") or s.get("created_at", "")[:10] or "2026-08-25")
+        amt = float(s.get("total_amount") or 0.0)
+        sales_by_date[dt]["revenue"] += amt
+        sales_by_date[dt]["count"] += 1
+
+    sorted_dates = sorted(sales_by_date.keys())
+    last_7_dates = sorted_dates[-7:] if len(sorted_dates) >= 7 else sorted_dates
+    sales_trend_7d = [
+        {
+            "date": dt,
+            "revenue": round(sales_by_date[dt]["revenue"], 2),
+            "invoices": sales_by_date[dt]["count"]
+        }
+        for dt in last_7_dates
+    ]
+
+    # 2. Category Breakdown
+    cat_revenue = defaultdict(float)
+    cat_units = defaultdict(float)
+    for s in sales:
+        items_list = s.get("items", [])
+        if items_list:
+            for it in items_list:
+                it_cat = "General"
+                for m in items:
+                    if m.get("item_code") == it.get("item_code"):
+                        it_cat = m.get("category") or "General"
+                        break
+                cat_revenue[it_cat] += float(it.get("total_amount") or 0.0)
+                cat_units[it_cat] += float(it.get("quantity") or 0.0)
+        else:
+            cat_revenue["General"] += float(s.get("total_amount") or 0.0)
+            cat_units["General"] += float(s.get("quantity") or 1.0)
+
+    category_breakdown = [
+        {"category": cat, "revenue": round(rev, 2), "units": round(cat_units[cat], 0)}
+        for cat, rev in sorted(cat_revenue.items(), key=lambda x: x[1], reverse=True)
+    ]
+
+    # 3. Stock Health
+    in_stock_cnt = 0
+    low_stock_cnt = 0
+    out_of_stock_cnt = 0
+    total_valuation = 0.0
+    for it in items:
+        icode = it.get("item_code")
+        qty = stock_balances.get(icode, 0.0)
+        min_alert = float(it.get("min_stock_alert") or 10.0)
+        price = float(it.get("price") or 0.0)
+        total_valuation += qty * price
+        if qty <= 0:
+            out_of_stock_cnt += 1
+        elif qty <= min_alert:
+            low_stock_cnt += 1
+        else:
+            in_stock_cnt += 1
+
+    stock_health = {
+        "total_skus": len(items),
+        "in_stock": in_stock_cnt,
+        "low_stock": low_stock_cnt,
+        "out_of_stock": out_of_stock_cnt,
+        "total_valuation": round(total_valuation, 2)
+    }
+
+    # 4. Top 5 Bestsellers
+    item_sales = defaultdict(lambda: {"name": "", "revenue": 0.0, "quantity": 0.0})
+    for s in sales:
+        items_list = s.get("items", [])
+        if items_list:
+            for it in items_list:
+                code = it.get("item_code", "UNKNOWN")
+                item_sales[code]["name"] = it.get("item_name") or code
+                item_sales[code]["revenue"] += float(it.get("total_amount") or 0.0)
+                item_sales[code]["quantity"] += float(it.get("quantity") or 0.0)
+
+    top_items = sorted(item_sales.items(), key=lambda x: x[1]["revenue"], reverse=True)[:5]
+    bestsellers = [
+        {"item_code": code, "name": data["name"], "revenue": round(data["revenue"], 2), "quantity": round(data["quantity"], 0)}
+        for code, data in top_items
+    ]
+
+    # 5. Working Capital / Receivables & Payables
+    total_sales_val = sum(float(s.get("total_amount") or 0.0) for s in sales)
+    total_purchase_val = sum(float(p.get("total_amount") or 0.0) for p in purchases)
+
+    return {
+        "sales_trend_7d": sales_trend_7d,
+        "category_breakdown": category_breakdown,
+        "stock_health": stock_health,
+        "bestsellers": bestsellers,
+        "working_capital": {
+            "total_sales_revenue": round(total_sales_val, 2),
+            "total_purchase_spend": round(total_purchase_val, 2),
+            "net_surplus": round(total_sales_val - total_purchase_val, 2)
+        }
+    }
+
+@app.get("/api/export/{module}/csv", tags=["8. Tax & Financial Reports"], summary="Export filtered ERP module data to CSV")
+def export_module_csv(
+    module: str,
+    search: Optional[str] = None,
+    category: Optional[str] = None,
+    vendor: Optional[str] = None,
+    customer: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None
+):
+    """
+    Export ERP module data to CSV format.
+    Supported modules: items, purchases, sales, inventory / stock_ledger, gst, pnl.
+    """
+    output = io.StringIO()
+    writer = csv.writer(output)
+
+    mod = module.lower()
+    if mod in ("items", "item", "products", "catalog"):
+        items = list_items(category=category, search=search)
+        writer.writerow(["Item Code", "Item Name", "Brand", "Category", "Retail Price (INR)", "Cost Price (INR)", "GST %", "Stock on Hand", "Min Alert Qty", "Stock Status", "Barcode"])
+        for it in items:
+            writer.writerow([
+                it.get("item_code", ""),
+                it.get("name", ""),
+                it.get("brand", ""),
+                it.get("category", ""),
+                it.get("price", 0.0),
+                it.get("cost_price", 0.0),
+                it.get("gst_percent", 5.0),
+                it.get("quantity_on_hand", 0.0),
+                it.get("min_stock_alert", 10.0),
+                it.get("stock_status", "IN_STOCK"),
+                it.get("barcode", "")
+            ])
+    elif mod in ("purchases", "purchase", "purchase_invoice", "purchase_invoices"):
+        purchases = list_purchases(search=search, vendor=vendor, start_date=start_date, end_date=end_date)
+        writer.writerow(["Bill No", "Date", "Vendor", "Vendor GSTIN", "Item Code", "Item Name", "Qty", "Rate (INR)", "Net Taxable (INR)", "GST %", "ITC Amount (INR)", "Gross Total (INR)"])
+        for p in purchases:
+            inv_no = p.get("invoice_no") or p.get("_id")
+            inv_date = p.get("invoice_date", "")
+            vnd = p.get("vendor", "")
+            gstin = p.get("vendor_gstin", "")
+            items = p.get("items") or []
+            if not items:
+                items = [{
+                    "item_code": p.get("item_code", ""),
+                    "item_name": p.get("item_name", ""),
+                    "quantity": p.get("quantity", 0),
+                    "rate": p.get("rate", 0.0),
+                    "net_amount": p.get("net_amount", 0.0),
+                    "gst_percent": p.get("gst_percent", 5.0),
+                    "gst_amount": p.get("gst_amount", 0.0),
+                    "total_amount": p.get("total_amount", 0.0)
+                }]
+            for it in items:
+                net = float(it.get("net_amount") or round(float(it.get("quantity", 0)) * float(it.get("rate", 0)), 2))
+                gst_pct = float(it.get("gst_percent") or 5.0)
+                gst_amt = float(it.get("gst_amount") or round(net * (gst_pct / 100.0), 2))
+                tot = float(it.get("total_amount") or round(net + gst_amt, 2))
+                writer.writerow([
+                    inv_no, inv_date, vnd, gstin,
+                    it.get("item_code", ""),
+                    it.get("item_name", ""),
+                    it.get("quantity", 0),
+                    it.get("rate", 0.0),
+                    net,
+                    gst_pct,
+                    gst_amt,
+                    tot
+                ])
+    elif mod in ("sales", "sale", "sales_invoice", "sales_invoices"):
+        sales = list_sales(search=search, customer=customer, start_date=start_date, end_date=end_date)
+        writer.writerow(["Invoice No", "Date", "Customer", "City", "Item Code", "Item Name", "Qty", "Rate (INR)", "Net Taxable (INR)", "GST %", "GST Amount (INR)", "Gross Total (INR)"])
+        for s in sales:
+            inv_no = s.get("invoice_no") or s.get("_id")
+            inv_date = s.get("invoice_date", "")
+            cust = s.get("customer_name") or (s.get("customer") or {}).get("name", "Walk-in")
+            city_val = s.get("customer_city") or (s.get("customer") or {}).get("city", "")
+            items = s.get("items") or []
+            if not items:
+                items = [{
+                    "item_code": s.get("item_code", ""),
+                    "item_name": s.get("item_name", ""),
+                    "quantity": s.get("quantity", 0),
+                    "rate": s.get("rate", 0.0),
+                    "net_amount": s.get("net_amount", 0.0),
+                    "gst_percent": s.get("gst_percent", 5.0),
+                    "gst_amount": s.get("gst_amount", 0.0),
+                    "total_amount": s.get("total_amount", 0.0)
+                }]
+            for it in items:
+                net = float(it.get("net_amount") or round(float(it.get("quantity", 0)) * float(it.get("rate", 0)), 2))
+                gst_pct = float(it.get("gst_percent") or 5.0)
+                gst_amt = float(it.get("gst_amount") or round(net * (gst_pct / 100.0), 2))
+                tot = float(it.get("total_amount") or round(net + gst_amt, 2))
+                writer.writerow([
+                    inv_no, inv_date, cust, city_val,
+                    it.get("item_code", ""),
+                    it.get("item_name", ""),
+                    it.get("quantity", 0),
+                    it.get("rate", 0.0),
+                    net,
+                    gst_pct,
+                    gst_amt,
+                    tot
+                ])
+    elif mod in ("inventory", "stock", "stock_ledger", "ledger"):
+        ledger = list_stock_ledger(search=search, start_date=start_date, end_date=end_date)
+        writer.writerow(["Date", "Item Code", "Item Name", "Movement Type", "Quantity", "Voucher Reference"])
+        for e in ledger:
+            writer.writerow([
+                e.get("date", ""),
+                e.get("item_code", ""),
+                e.get("item_name", ""),
+                e.get("transaction_type") or e.get("movement_type", ""),
+                e.get("quantity", 0),
+                e.get("voucher_no", "")
+            ])
+    elif mod in ("gst", "itc", "gst_itc", "gst-itc"):
+        gst_data = get_gst_report()
+        writer.writerow(["Metric", "Amount (INR)", "Details"])
+        writer.writerow(["Output GST (GSTR-1)", gst_data.get("output_gst_sales", 0.0), "Sales tax liability"])
+        writer.writerow(["Input Tax Credit (GSTR-2B)", gst_data.get("input_gst_purchases", 0.0), "Vendor procurement ITC"])
+        writer.writerow(["ITC Utilized", gst_data.get("itc_utilized", 0.0), "Offset against Output GST"])
+        writer.writerow(["Net GST Cash Payable", gst_data.get("net_gst_payable_in_cash", 0.0), "Cash outflow required"])
+        writer.writerow(["Excess ITC Balance", gst_data.get("excess_itc_carried_forward", 0.0), "Carried forward to next month"])
+    elif mod in ("pnl", "profit_loss", "erp_pnl", "erp-pnl"):
+        pnl_data = get_pnl_statement(operating_expenses=850.0)
+        writer.writerow(["Account Head", "Amount (INR)"])
+        writer.writerow(["Gross Sales Revenue", pnl_data.get("revenue", 0.0)])
+        writer.writerow(["Cost of Goods Sold (COGS)", pnl_data.get("cost_of_goods_sold", pnl_data.get("cogs", 0.0))])
+        writer.writerow(["Gross Profit", pnl_data.get("gross_profit", 0.0)])
+        writer.writerow(["Operating Expenses", pnl_data.get("operating_expenses", 0.0)])
+        writer.writerow(["Net Operating Profit", pnl_data.get("net_profit", pnl_data.get("net_operating_profit", 0.0))])
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported module '{module}' for CSV export")
+
+    csv_content = output.getvalue()
+    return Response(
+        content=csv_content,
+        media_type="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={mod}_export.csv"}
+    )
 
 # ---------------------------------------------------------------------------
 # MODULE 9: BIGQUERY CLOUD DATA WAREHOUSE ETL SYNC
@@ -1855,6 +2833,11 @@ def get_bigquery_sync_status():
     and row counts in BigQuery dataset `jompoi_reporting`.
     """
     wh = get_warehouse_backend()
+    try:
+        if _BQ_SYNC_SERVICE._read_outbox().get("pending", []):
+            _BQ_SYNC_SERVICE.process_outbox(wh)
+    except Exception:
+        pass
     return _BQ_SYNC_SERVICE.get_status(wh)
 
 @app.post("/api/bigquery/sync-outbox", tags=["10. Google BigQuery Integration"], summary="Retry and process pending BigQuery outbox items")
@@ -1865,6 +2848,11 @@ def process_bigquery_outbox():
     """
     wh = get_warehouse_backend()
     return _BQ_SYNC_SERVICE.process_outbox(wh)
+
+# Favicon handler to avoid 404 console noise
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon():
+    return Response(status_code=204)
 
 # System Root & Health
 @app.get("/api/health", tags=["System"])
@@ -1881,21 +2869,32 @@ def health_check():
 def root_gui():
     index_file = BASE_DIR / "index.html"
     if index_file.exists():
-        return FileResponse(index_file)
+        return FileResponse(index_file, headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"})
     return RedirectResponse(url="/docs")
+
+@app.get("/items", include_in_schema=False)
+@app.get("/add-item", include_in_schema=False)
+def route_items_gui():
+    return RedirectResponse(url="/#items")
+
+@app.get("/purchases", include_in_schema=False)
+@app.get("/create-purchase", include_in_schema=False)
+@app.get("/purchase-invoices", include_in_schema=False)
+def route_purchases_gui():
+    return RedirectResponse(url="/#purchases")
 
 @app.get("/styles.css", include_in_schema=False)
 def serve_styles():
     styles_file = BASE_DIR / "styles.css"
     if styles_file.exists():
-        return FileResponse(styles_file, media_type="text/css")
+        return FileResponse(styles_file, media_type="text/css", headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"})
     return JSONResponse(status_code=404, content={"detail": "styles.css not found"})
 
 @app.get("/app.js", include_in_schema=False)
 def serve_app_js():
     js_file = BASE_DIR / "app.js"
     if js_file.exists():
-        return FileResponse(js_file, media_type="application/javascript")
+        return FileResponse(js_file, media_type="application/javascript", headers={"Cache-Control": "no-cache, no-store, must-revalidate", "Pragma": "no-cache", "Expires": "0"})
     return JSONResponse(status_code=404, content={"detail": "app.js not found"})
 
 @app.get("/docs.html", include_in_schema=False)

@@ -13,6 +13,11 @@ class LocalWarehouseEmulator:
     def __init__(self, db_path: str = ":memory:"):
         self.conn = sqlite3.connect(db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
+        try:
+            self.conn.execute("PRAGMA journal_mode=WAL;")
+            self.conn.execute("PRAGMA synchronous=NORMAL;")
+        except Exception:
+            pass
         self._init_tables()
 
     def _init_tables(self):
@@ -118,6 +123,19 @@ class LocalWarehouseEmulator:
             updated_at TEXT
         );
         """)
+
+        # Performance Indexes for sub-millisecond querying
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_items_code ON items(item_code);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_items_category ON items(category);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_items_barcode ON items(barcode);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sales_invoice_no ON sales(invoice_no);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sales_date ON sales(invoice_date);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_sales_item ON sales(item_code);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_purchases_invoice_no ON purchases(invoice_no);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_purchases_date ON purchases(invoice_date);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_purchases_vendor ON purchases(vendor);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_stock_item_date ON stock_ledger(item_code, date);")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_customers_phone ON customers(phone);")
 
         self.conn.commit()
         self._init_views()

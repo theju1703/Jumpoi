@@ -29,6 +29,11 @@ ENV/
 *.pem
 service-account*.json
 gcp-key*.json
+gcp_key*.json
+gcp_token.txt
+*token*.txt
+*credentials*.json
+*.secret.json
 
 # State and Logs
 sync_state.json
