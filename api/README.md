@@ -22,7 +22,6 @@ Once running:
 - **OpenAPI JSON Spec:** [http://localhost:8080/openapi.json](http://localhost:8080/openapi.json)
 - **Hosted GitHub Pages ERP System:** [https://theju1703.github.io/Jumpoi/](https://theju1703.github.io/Jumpoi/)
 - **Hosted API Documentation:** [https://theju1703.github.io/Jumpoi/docs.html](https://theju1703.github.io/Jumpoi/docs.html)
-- **Android APK Direct Download:** [https://github.com/theju1703/Jumpoi/raw/main/apk/jumpoi.apk](https://github.com/theju1703/Jumpoi/raw/main/apk/jumpoi.apk)
 
 ---
 

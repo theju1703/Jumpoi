@@ -684,7 +684,7 @@ body { font-family: var(--font-family); background-color: var(--bg-primary); col
    BREAKPOINT 2: Standard Tablets & Mobile Screens (<= 768px)
    -------------------------------------------------------------------------- */
 @media (max-width: 768px) {
-  /* Prevent iOS Safari and Android Chrome from Auto-Zooming inputs */
+  /* Prevent mobile web browsers (Safari, Chrome) from auto-zooming inputs */
   input[type="text"],
   input[type="number"],
   input[type="date"],

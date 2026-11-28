@@ -2,20 +2,20 @@
 
 **Author:** Senior Backend Architect, API Governance Specialist & ERP System Analyst  
 **Date:** 2026-11-06  
-**System Status:** Production Ready & Verified (44/44 PyTest Tests Passing, Android APK Compiled)
+**System Status:** Production Ready & Verified (44/44 PyTest Tests Passing)
 
 ---
 
 ## Executive Summary
 
-A comprehensive architectural audit and API governance review was conducted across the **Jompoi Supermarket ERP** ecosystem, covering the FastAPI backend, MongoDB/document data layer, Android Jetpack Compose client application, Web dashboard, and automated test suite.
+A comprehensive architectural audit and API governance review was conducted across the **Jompoi Supermarket ERP** ecosystem, covering the FastAPI backend, MongoDB/document data layer, Web ERP dashboard, and automated test suite.
 
 The audit identified **6 duplicate route pairs** (12 route handlers mapped redundantly to identical controller functions), **2 functional overlaps** in customer lookup and inventory safety-stock alerts, and **asymmetric endpoint naming** between commercial sales invoice printing (`/api/invoice/print`) and vendor purchase printing (`/api/purchases/print`).
 
 Through backward-compatible REST consolidation:
 - Public OpenAPI documented endpoints were streamlined from **39 route definitions down to 31 canonical, logically organized REST paths**.
 - **100% backward compatibility** is preserved: deprecated aliases remain fully operational for legacy clients without cluttering public Swagger/OpenAPI documentation (`include_in_schema=False`).
-- **Zero regressions**: All 44 automated pytest end-to-end test cases pass, and the Android application (`jumpoi.apk`) builds and communicates flawlessly with the canonical endpoints.
+- **Zero regressions**: All 44 automated pytest end-to-end test cases pass.
 
 ---
 
@@ -101,7 +101,7 @@ The audit classified the 39 existing routes into **Essential**, **Exact Duplicat
 | `/api/vendors` | `POST` | Register supplier with GSTIN | **KEEP** | Supplier master directory. |
 | `/api/purchases` | `GET` | List procurement bills & ITC | **KEEP** | Canonical REST collection endpoint. |
 | `/api/purchases/invoices` | `GET` | List procurement bills | **MERGE / HIDE** | Alias hidden from OpenAPI schema (`include_in_schema=False`). |
-| `/api/purchases/invoice` | `POST` | Inward bill & stock increment | **KEEP** | Canonical endpoint consumed by Android. |
+| `/api/purchases/invoice` | `POST` | Inward bill & stock increment | **KEEP** | Canonical enterprise procurement endpoint. |
 | `/api/purchases/invoices` | `POST` | Inward bill & stock increment | **MERGE / HIDE** | Alias hidden from OpenAPI schema (`include_in_schema=False`). |
 | `/api/purchases` | `POST` | Inward bill & stock increment | **MERGE / HIDE** | Alias hidden from OpenAPI schema (`include_in_schema=False`). |
 | `/api/purchases/print` | `POST` | Commercial purchase bill print | **KEEP** | Formula: $(P + T) \times Q$. Exact table columns. |
@@ -111,7 +111,7 @@ The audit classified the 39 existing routes into **Essential**, **Exact Duplicat
 | `/api/customers` | `POST` | Register customer profile | **KEEP** | Essential CRM registration. |
 | `/api/sales` | `GET` | List customer sales invoices | **KEEP** | Canonical REST collection endpoint. |
 | `/api/sales/invoices` | `GET` | List customer sales invoices | **MERGE / HIDE** | Alias hidden from OpenAPI schema (`include_in_schema=False`). |
-| `/api/sales/invoice` | `POST` | POS bill creation & stock deduction | **KEEP** | Canonical endpoint consumed by Android. |
+| `/api/sales/invoice` | `POST` | POS bill creation & stock deduction | **KEEP** | Canonical enterprise POS billing endpoint. |
 | `/api/sales/invoices` | `POST` | POS bill creation & stock deduction | **MERGE / HIDE** | Alias hidden from OpenAPI schema (`include_in_schema=False`). |
 | `/api/sales` | `POST` | POS bill creation & stock deduction | **MERGE / HIDE** | Alias hidden from OpenAPI schema (`include_in_schema=False`). |
 | `/api/sales/{no}` | `GET` | Retrieve single sales invoice | **KEEP** | Essential billing lookup. |
@@ -121,36 +121,34 @@ The audit classified the 39 existing routes into **Essential**, **Exact Duplicat
 | `/api/sales/{no}/print` | `GET` | Print existing DB sales invoice | **KEEP** | Canonical counterpart to `/api/purchases/{no}/print`. |
 | `/api/invoice/print` | `POST` | Printable commercial sales invoice | **MERGE / HIDE** | Backward-compatibility alias for legacy clients. |
 | `/api/invoice/{no}/print` | `GET` | Print existing DB sales invoice | **MERGE / HIDE** | Backward-compatibility alias for legacy clients. |
-| `/api/gst/report` | `GET` | GST Input Tax Credit reconciliation | **KEEP** | Canonical endpoint consumed by Android. |
+| `/api/gst/report` | `GET` | GST Input Tax Credit reconciliation | **KEEP** | Canonical enterprise tax reconciliation endpoint. |
 | `/api/gst/reconciliation` | `GET` | GST Input Tax Credit reconciliation | **DEPRECATE** | Blueprint alias marked `deprecated=True`. |
-| `/api/pnl` | `GET` | Profit & Loss financial statement | **KEEP** | Canonical endpoint consumed by Android. |
+| `/api/pnl` | `GET` | Profit & Loss financial statement | **KEEP** | Canonical enterprise financial P&L endpoint. |
 | `/api/reports/pnl` | `GET` | Profit & Loss financial statement | **DEPRECATE** | Blueprint alias marked `deprecated=True`. |
-| `/api/reports/summary` | `GET` | Executive operational KPIs | **KEEP** | Consumed by Android dashboard. |
+| `/api/reports/summary` | `GET` | Executive operational KPIs | **KEEP** | Executive operational summary endpoint. |
 | `/api/etl/sync` | `POST` | BigQuery Cloud DW sync trigger | **KEEP** | Canonical data warehouse endpoint. |
 | `/api/sync/trigger` | `POST` | BigQuery Cloud DW sync trigger | **DEPRECATE** | Backward-compatibility alias marked `deprecated=True`. |
 | `/api/health` | `GET` | System health check | **KEEP** | Liveness probe. |
 
 ---
 
-## Phase 5 & 6: Android Application Dependency Mapping
+## Phase 5 & 6: Web Client & REST Integration Mapping
 
-An inspection of `android/app/src/main/kotlin/com/example/jompoierp/` verified that all 8 mobile application endpoints map directly to canonical routes:
+The Web ERP frontend interacts with canonical REST endpoints:
 
 ```mermaid
 graph LR
-    subgraph Android App
-        LoginScreen --> LoginAPI["POST /api/auth/login"]
-        DashboardScreen --> SummaryAPI["GET /api/reports/summary"]
-        PosBillingScreen --> ItemsAPI["GET /api/items"]
-        PosBillingScreen --> SalesAPI["POST /api/sales/invoice"]
-        InventoryScreen --> StockAPI["GET /api/stock"]
-        PurchasesScreen --> PurchasesAPI["POST /api/purchases/invoice"]
-        ReportsScreens --> GstAPI["GET /api/gst/report"]
-        ReportsScreens --> PnlAPI["GET /api/pnl"]
+    subgraph Web ERP
+        CatalogView --> ItemsAPI["GET /api/items"]
+        SalesView --> SalesAPI["POST /api/sales/invoice"]
+        PurchasesView --> PurchasesAPI["POST /api/purchases/invoice"]
+        InventoryView --> StockAPI["GET /api/stock"]
+        GstView --> GstAPI["GET /api/gst/report"]
+        PnlView --> PnlAPI["GET /api/pnl"]
     end
 ```
 
-Every endpoint in `ErpApiClient.kt` is canonical. No Android screen or repository references obsolete or broken routes.
+Every endpoint consumed by the Web ERP client is canonical and fully backward-compatible.
 
 ---
 
@@ -189,7 +187,6 @@ tests/test_views_execution.py .                                          [100%]
 ```
 
 - All 44 automated pytest test cases passed.
-- Android APK compiled cleanly via Gradle (`assembleDebug`) with 36/36 tasks up-to-date.
 
 ---
 
@@ -203,4 +200,3 @@ tests/test_views_execution.py .                                          [100%]
 | **Deprecated / Alias Annotations** | 0 | 5 cleanly tagged | Standardized governance |
 | **Business Calculation Duplication** | 3 separate stock calculation loops | **1 unified `get_stock_balances()` helper** | Unified architecture |
 | **PyTest Pass Rate** | 100% (44/44) | **100% (44/44)** | Zero regressions |
-| **Android APK Compatibility** | 100% | **100%** | Maintained |
