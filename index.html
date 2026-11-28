@@ -14,13 +14,16 @@
 <body>
   <div class="app-container">
     <!-- Sidebar Navigation -->
-    <aside class="sidebar">
+    <aside class="sidebar" id="erp-sidebar">
       <div class="brand">
         <div class="brand-icon"><i class="fa-solid fa-boxes-packing"></i></div>
         <div class="brand-text">
           <h2>Jompoi ERP</h2>
           <span>Business System</span>
         </div>
+        <button id="mobile-menu-close" class="mobile-menu-close" aria-label="Close menu">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
       </div>
 
       <nav class="nav-menu">
@@ -56,15 +59,20 @@
       </div>
     </aside>
 
+    <!-- Sidebar Backdrop for Mobile Screens -->
+    <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
+
     <!-- Main Content Area -->
     <main class="main-content">
       <!-- Top Header -->
       <header class="top-header">
+        <button id="mobile-menu-toggle" class="mobile-menu-btn" aria-label="Toggle navigation menu">
+          <i class="fa-solid fa-bars"></i>
+        </button>
         <div class="header-title">
           <h1 id="page-title">Product & Inventory Catalog</h1>
           <p id="page-subtitle">Manage supermarket master items, retail pricing, tax rates, and stock thresholds</p>
         </div>
-        
       </header>
 
       <!-- TAB 1: PRINT INVOICE (Default View) -->

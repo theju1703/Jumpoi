@@ -341,11 +341,53 @@ document.addEventListener("DOMContentLoaded", () => {
     else if (moduleName === "pnl") renderPnLStatement();
   }
 
-  // Tab Navigation Handling
+  // Tab Navigation & Mobile Drawer Handling
   const navButtons = document.querySelectorAll(".nav-item");
   const tabPanes = document.querySelectorAll(".tab-pane");
   const pageTitle = document.getElementById("page-title");
   const pageSubtitle = document.getElementById("page-subtitle");
+
+  // Mobile Off-Canvas Navigation Drawer Controller
+  const mobileMenuToggle = document.getElementById("mobile-menu-toggle");
+  const mobileMenuClose = document.getElementById("mobile-menu-close");
+  const sidebarBackdrop = document.getElementById("sidebar-backdrop");
+  const erpSidebar = document.getElementById("erp-sidebar") || document.querySelector(".sidebar");
+
+  function openMobileSidebar() {
+    if (erpSidebar) erpSidebar.classList.add("open");
+    if (sidebarBackdrop) sidebarBackdrop.classList.add("active");
+    document.body.style.overflow = "hidden";
+  }
+
+  function closeMobileSidebar() {
+    if (erpSidebar) erpSidebar.classList.remove("open");
+    if (sidebarBackdrop) sidebarBackdrop.classList.remove("active");
+    document.body.style.overflow = "";
+  }
+
+  if (mobileMenuToggle) {
+    mobileMenuToggle.addEventListener("click", () => {
+      if (erpSidebar && erpSidebar.classList.contains("open")) {
+        closeMobileSidebar();
+      } else {
+        openMobileSidebar();
+      }
+    });
+  }
+
+  if (mobileMenuClose) {
+    mobileMenuClose.addEventListener("click", closeMobileSidebar);
+  }
+
+  if (sidebarBackdrop) {
+    sidebarBackdrop.addEventListener("click", closeMobileSidebar);
+  }
+
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && erpSidebar && erpSidebar.classList.contains("open")) {
+      closeMobileSidebar();
+    }
+  });
 
   const tabMetadata = {
     "tab-invoice": { title: "Tax Invoice & Commercial Bill Printing", subtitle: "Generate, review, and print official commercial Sales Invoices and Vendor Purchase Bills" },
@@ -376,6 +418,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (window.location.hash !== "#" + hashName) {
       history.replaceState(null, null, "#" + hashName);
     }
+
+    // Auto-close drawer on mobile when user selects any tab
+    closeMobileSidebar();
   }
 
   navButtons.forEach(btn => {
